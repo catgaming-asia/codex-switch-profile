@@ -198,7 +198,12 @@ background checks following the toggle, using a fake notification center. Actual
 switching, popover translucency, notification banners and permission prompts
 still require a manual check on macOS. Follow [Apple's Dark Mode guidance](https://developer.apple.com/documentation/appkit/supporting-dark-mode-in-your-interface).
 
-These are renders of the actual AppKit view in light and dark appearance,
+The current menu and Account info page are shown in these macOS screenshots:
+
+<img src="../docs/images/menu-current.png" width="400" alt="Current menu with Switch buttons, selected profiles, automatic switching and Codex quota">
+<img src="../docs/images/account-info.png" width="400" alt="Account info page with Codex quota and automatic-switch threshold">
+
+The images below are renders of the AppKit view in light and dark appearance,
 with sample quota values for layout review.
 They use an opaque system backdrop for layout review; live translucency is
 provided by NSPopover and depends on macOS appearance and accessibility settings.

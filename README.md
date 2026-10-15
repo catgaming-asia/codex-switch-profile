@@ -1,7 +1,7 @@
 <a id="readme-top"></a>
 
 <div align="center">
-  <img src="https://github.com/Ducksss/codex-profiles/raw/refs/heads/main/macos/CodexProfilesMenu/Previews/app-icon.png" alt="Codex Profiles app icon" width="96" height="96">
+  <img src="https://github.com/phuhoang304149/codex-profile/raw/refs/heads/main/macos/CodexProfilesMenu/Previews/app-icon.png" alt="Codex Profiles app icon" width="96" height="96">
 
   <h1>Codex Profiles</h1>
 
@@ -27,12 +27,9 @@
 </div>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/Ducksss/codex-profiles/raw/refs/heads/main/macos/CodexProfilesMenu/Previews/menu-dark.png">
-    <img src="https://github.com/Ducksss/codex-profiles/raw/refs/heads/main/macos/CodexProfilesMenu/Previews/menu-light.png" width="440" alt="Codex Profiles menu bar with personal and work profiles, remaining Codex quota, reset times and pinned project shortcuts.">
-  </picture>
+  <img src="https://github.com/phuhoang304149/codex-profile/raw/refs/heads/main/docs/images/menu-current.png" width="520" alt="Current Codex Profiles menu with default and named profiles, quota on the menu bar, Switch buttons, profile checkboxes, and Auto switching.">
   <br />
-  <sub>Actual AppKit view with sample quota values. Light and dark appearance follow macOS.</sub>
+  <sub>Current macOS menu with live quota readings; account values vary by profile.</sub>
 </p>
 
 <details>
@@ -61,6 +58,8 @@ with a profile's quota and project shortcuts in the same menu.
 | --- | --- |
 | **Profiles** | Create a profile, open it in ChatGPT or Terminal, and click its avatar for quota details. |
 | **Codex quota** | See remaining CLI limits, low-quota warnings and reset times for each profile. |
+| **Switching** | Switch a named profile into `default`, or opt into automatic switching at a chosen quota threshold. |
+| **Management** | Rename or remove named profiles from their actions menu. |
 | **Projects** | Bind folders to profiles, pin favourites and open them from the menu or keyboard. |
 
 The app bundles the `codex-profile` CLI engine. Both use the same profiles
@@ -142,6 +141,11 @@ profile confirms before deleting its local data and workspace bindings.
 and show their reset time. Hover for details or press **⌘R** to refresh.
 Click a profile's avatar to see its `5h` and weekly quota, reset times and
 last check on a separate Info page. **Back** returns to the profile list.
+
+<p align="center">
+  <img src="https://github.com/phuhoang304149/codex-profile/raw/refs/heads/main/docs/images/account-info.png" width="400" alt="Account info page showing a named profile's weekly Codex CLI quota, reset time, last check, and automatic-switch threshold slider.">
+</p>
+
 The menu bar also shows `default`'s `5h` and weekly (`W`) remaining percentages,
 for example `5h 65% · W 63%`; it shows only the icon until that reading is available.
 Choose **Hide profile names** in the gear menu to mask profile names while

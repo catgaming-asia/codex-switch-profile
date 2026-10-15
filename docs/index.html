@@ -1085,6 +1085,7 @@
     .menubar-build { margin-top: 24px; color: #333; font-size: .95rem; }
     .menubar-shot { justify-self: center; margin: 0; }
     .menubar-shot img { display: block; width: min(400px, 100%); height: auto; border: 1px solid #000; border-radius: 14px; box-shadow: 0 24px 60px rgba(0, 0, 0, .18); }
+    .menubar-shot img + img { margin-top: 24px; }
     .menubar-shot figcaption { margin-top: 12px; color: #555; font-family: "JetBrains Mono", monospace; font-size: .68rem; text-transform: uppercase; }
 
     .facts-section .section-head { margin-bottom: 38px; }
@@ -1372,14 +1373,16 @@ codex-profile doctor</code></pre>
           <p class="lede">Codex Profiles.app lists your profiles and project bindings in the menu bar, opens any of them in ChatGPT or Terminal, and shows each profile's remaining Codex quota before you switch.</p>
           <ul class="menubar-points">
             <li><strong>Quota at a glance</strong>Meters turn orange or red when a window runs low, and the row says when it resets.</li>
-            <li><strong>Set up from the menu</strong>Create profiles, start Codex CLI sign-in in Terminal, and add, reassign or repair project bindings.</li>
+            <li><strong>Switch with control</strong>Switch a named profile into default, or opt into automatic switching with per-profile checkboxes and quota thresholds in Account info.</li>
+            <li><strong>Manage from the menu</strong>Create, rename and remove named profiles, start Codex CLI sign-in in Terminal, and manage project bindings.</li>
             <li><strong>Native on macOS</strong>Follows light and dark mode, contrast and Reduce Motion. Open at Login keeps it in the menu bar.</li>
           </ul>
           <p class="menubar-build">Build it from a source checkout on macOS 13 or newer with <span class="mono">make menu-app</span>. It includes codex-profile and uses the official Codex CLI for Terminal launches, sign-in and quota. There is no signed download yet.</p>
         </div>
         <figure class="menubar-shot">
-          <img src="https://github.com/Ducksss/codex-profiles/raw/refs/heads/main/macos/CodexProfilesMenu/Previews/menu-light.png" width="400" height="478" loading="lazy" decoding="async" alt="Codex Profiles menu-bar app: three profiles with remaining Codex quota meters, one low in orange and one critical in red with its reset time, followed by pinned and recent workspaces with Open buttons.">
-          <figcaption>The app's actual view, sample quota values</figcaption>
+          <img src="images/menu-current.png" width="400" height="323" loading="lazy" decoding="async" alt="Current Codex Profiles menu with quota, profile checkboxes, Switch buttons and automatic switching.">
+          <img src="images/account-info.png" width="400" height="339" loading="lazy" decoding="async" alt="Account info page with quota and automatic-switch threshold slider.">
+          <figcaption>Current macOS menu and Account info page</figcaption>
         </figure>
       </div>
     </section>

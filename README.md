@@ -14,13 +14,13 @@
   <p>
     <a href="#getting-started"><strong>Build the macOS app »</strong></a>
     &middot;
-    <a href="https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md">App guide</a>
+    <a href="https://github.com/phuhoang304149/codex-profile/blob/main/macos/README.md">App guide</a>
     &middot;
     <a href="#command-line-usage">CLI</a>
   </p>
 
   <p>
-    <a href="https://github.com/Ducksss/codex-profiles/actions/workflows/ci.yml"><img src="https://github.com/Ducksss/codex-profiles/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <a href="https://github.com/phuhoang304149/codex-profile/actions/workflows/ci.yml"><img src="https://github.com/phuhoang304149/codex-profile/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <a href="#prerequisites"><img src="https://img.shields.io/badge/macOS-13%2B-lightgrey.svg" alt="macOS 13 or newer"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT licence"></a>
   </p>
@@ -66,6 +66,10 @@ with a profile's quota and project shortcuts in the same menu.
 The app bundles the `codex-profile` CLI engine. Both use the same profiles
 and project bindings. This is a community project, unaffiliated with OpenAI.
 
+This repository is a fork of [Codex Profiles by Ducksss](https://github.com/Ducksss/codex-profiles).
+The instructions below describe this fork's source checkout. The original
+project and its published packages are maintained separately.
+
 ### Built with
 
 **Swift and AppKit** for the native macOS interface, **Bash and standard
@@ -74,8 +78,9 @@ accent colours and accessibility preferences.
 
 ## Getting started
 
-**Build from source for now.** A signed app download is planned. npm and
-Homebrew install the [CLI](#command-line-usage) only.
+**Build this fork from source for now.** The npm and Homebrew commands below
+install the original project's [CLI](#command-line-usage), not changes that
+exist only in this fork.
 
 ### Prerequisites
 
@@ -88,8 +93,8 @@ Homebrew install the [CLI](#command-line-usage) only.
 ### Installation
 
 ```sh
-git clone https://github.com/Ducksss/codex-profiles.git
-cd codex-profiles
+git clone https://github.com/phuhoang304149/codex-profile.git
+cd codex-profile
 make menu-app
 open build/macos
 ```
@@ -98,7 +103,7 @@ Drag **Codex Profiles.app** to **Applications**, then open it. The app includes
 this project's CLI, so no separate npm or Homebrew installation is needed.
 
 Local builds are unsigned development builds. For a DMG, signing and
-notarisation, see the [macOS build guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md#build-locally).
+notarisation, see the [macOS build guide](https://github.com/phuhoang304149/codex-profile/blob/main/macos/README.md#build-locally).
 
 <a id="menu-bar-app-macos"></a>
 
@@ -117,11 +122,17 @@ Different names can stay open side by side. Reopening a name keeps its local
 data, and `default` opens your normal ChatGPT session. Enable **Open at Login**
 in the gear menu to keep the app available after you log in.
 
-Named profiles have a **Switch** button and **Remove profile…** in their actions menu.
+Named profiles have a **Switch** button, plus **Rename profile…** and **Remove profile…** in their actions menu.
 Clicking the profile row only selects it. Switching confirms, closes the Desktop app, backs up the
 previous default `auth.json`, copies the named profile's authentication into
-default, reopens Desktop and refreshes quota. Removing confirms before deleting
-the named profile's local data and workspace bindings.
+default, reopens Desktop only if it was running, and refreshes quota. The
+profile last switched into default hides its **Switch** button. Checkboxes on
+profile rows select participants for the optional **Auto** switch control beside
+**Add profile…**; the avatar's Info panel sets each profile's quota threshold.
+`default` is green and selected profiles are yellow. Automatic switching uses
+fresh Codex CLI quota readings; the active-profile marker reflects switches
+made through this menu rather than a verified Desktop account. Removing a
+profile confirms before deleting its local data and workspace bindings.
 
 ### Check quota before opening a profile
 
@@ -137,13 +148,13 @@ capturing a screenshot, then **Show profile names** to restore them.
 The menu bar icon gains a badge when a profile runs low. Turn on
 **Low-quota alerts** in the gear menu for a notification when a profile
 crosses into low or critical. Alerts are off by default, and the app never
-switches profiles for you.
+switches profiles unless you separately enable **Auto** and select participants.
 
 For an unavailable reading, use **Sign in to Codex CLI…** in that profile's
 actions menu, then refresh. Quota follows the profile's **CLI sign-in**.
 ChatGPT can use a different account, and the app does not compare accounts.
 A missing reading never prevents you from opening a profile. See the
-[quota guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md#codex-usage-beside-each-profile)
+[quota guide](https://github.com/phuhoang304149/codex-profile/blob/main/macos/README.md#codex-usage-beside-each-profile)
 for supported accounts and troubleshooting.
 
 ### Open a project with its profile
@@ -165,7 +176,7 @@ remove the shortcut. Bindings are local metadata and do not change project files
 
 Opening the app again from Finder or Spotlight shows the menu. Terminal
 actions may request macOS Automation permission on first use. The
-[app guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md)
+[app guide](https://github.com/phuhoang304149/codex-profile/blob/main/macos/README.md)
 covers all controls and accessibility details.
 
 </details>
@@ -177,7 +188,7 @@ projects in ChatGPT or Terminal and shows each profile's remaining Codex quota.
 Like the menu bar app, it runs every action through `codex-profile`, using a
 standalone install or the copy inside the menu bar app. It isn't in the
 Raycast Store yet, so build it from a source checkout with Node.js. See the
-[extension guide](https://github.com/Ducksss/codex-profiles/blob/main/raycast/README.md).
+[extension guide](https://github.com/phuhoang304149/codex-profile/blob/main/raycast/README.md).
 
 ```sh
 cd raycast && npm install && npm run dev
@@ -212,6 +223,8 @@ Bash and the official Codex CLI, on `PATH` or discoverable inside ChatGPT.
 
 ### Quick start
 
+The commands below install the original project's CLI release.
+
 ```sh
 npm install -g codex-profile
 codex-profile setup work
@@ -225,6 +238,8 @@ startup changes are shown for approval first. For scripts, use `init`,
 
 Install **`codex-profile`** (singular). It provides both `codex-profile` and
 `codex-profiles` commands. The plural npm package is another project.
+To use this fork's CLI changes, clone this repository and run `make install`
+from its root instead.
 
 ### Install
 
@@ -235,7 +250,7 @@ Install **`codex-profile`** (singular). It provides both `codex-profile` and
 brew install Ducksss/tap/codex-profile
 ```
 
-From a source checkout, run `make install`.
+From this fork's source checkout, run `make install`.
 
 The pinned standalone and Nix commands below require the `v1.3.0` release
 tag, which has not been published yet. Use npm, Homebrew or source until then.
@@ -296,30 +311,39 @@ terminal colours, and piped help is plain text.
 - [x] Universal app and DMG builds with signing and notarisation support.
 - [ ] Published signed and notarised macOS app download.
 
-See the [changelog](CHANGELOG.md) and [open issues](https://github.com/Ducksss/codex-profiles/issues).
+See the [changelog](CHANGELOG.md) and [fork's open issues](https://github.com/phuhoang304149/codex-profile/issues).
 
 ## Contributing
 
-Start with the [contributor guide](https://github.com/Ducksss/codex-profiles/blob/main/CONTRIBUTING.md)
-and [coding-agent instructions](https://github.com/Ducksss/codex-profiles/blob/main/AGENTS.md).
+Start with this fork's [contributor guide](https://github.com/phuhoang304149/codex-profile/blob/main/CONTRIBUTING.md)
+and [coding-agent instructions](https://github.com/phuhoang304149/codex-profile/blob/main/AGENTS.md).
+The [original project's agent guide](https://github.com/Ducksss/codex-profiles/blob/main/AGENTS.md)
+remains available upstream.
 Before opening a pull request, run `make check` for syntax, behaviour,
 packaging, native macOS tests and ShellCheck. Native builds are skipped
 on hosts without macOS and Swift.
 
 ## License
 
-[MIT](LICENSE).
+This fork retains the original project's [MIT license](LICENSE) and its
+copyright notice, **Copyright (c) 2026 Chai Pin Zheng**. Keep that notice and
+the license text with copies or substantial portions of the software.
 
 ## Contact
 
-[Report a bug](https://github.com/Ducksss/codex-profiles/issues/new?template=bug_report.yml) ·
-[Request a feature](https://github.com/Ducksss/codex-profiles/issues/new?template=feature_request.yml) ·
-[Discuss a workflow](https://github.com/Ducksss/codex-profiles/discussions) ·
-[Project site](https://ducksss.github.io/codex-profiles/)
+[Report a bug](https://github.com/phuhoang304149/codex-profile/issues/new?template=bug_report.yml) ·
+[Request a feature](https://github.com/phuhoang304149/codex-profile/issues/new?template=feature_request.yml) ·
+[Upstream discussions](https://github.com/Ducksss/codex-profiles/discussions) ·
+[Upstream project site](https://ducksss.github.io/codex-profiles/)
 
 For security reports, follow [SECURITY.md](SECURITY.md).
 
 ## Acknowledgements
+
+Thank you to [Chai Pin Zheng (Ducksss)](https://github.com/Ducksss) for
+creating and sharing the [original Codex Profiles project](https://github.com/Ducksss/codex-profiles)
+under the MIT license. This fork builds on that work and does not claim
+authorship of the original code.
 
 [Best-README-Template](https://github.com/othneildrew/Best-README-Template)
 for the structure, and [contributors](https://github.com/Ducksss/codex-profiles/graphs/contributors)

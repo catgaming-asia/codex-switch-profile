@@ -36,8 +36,9 @@ Local-state separation is not an account, OS, or server-side boundary.
 
 The launcher uses the original signed ChatGPT (or legacy Codex) application.
 It does not clone, patch, re-sign, replace, or kill the installed app. The
-confirmed macOS menu **Switch** button on a named profile requests a graceful quit of
-all running instances of that app before replacing default authentication.
+confirmed macOS menu **Switch** button and separately opted-in automatic switch
+request a graceful quit of running instances before replacing default
+authentication. They reopen Desktop only if it was already running.
 Compatibility spellings such as `--instance`, `--rebuild`, and `app-instance`
 do not restore the old clone behavior.
 

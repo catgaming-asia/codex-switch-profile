@@ -298,6 +298,24 @@ struct MenuInteractionTests {
         let defaultRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("default") }!
         expect(!descendants(defaultRow).compactMap { $0 as? NSButton }.contains { $0.title == "Switch" || $0.title == "Open" },
             "default profile must have no primary action button")
+        let workRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("work") }!
+        let workCheck = descendants(workRow).compactMap { $0 as? NSButton }.first { $0.accessibilityLabel() == "Include work in automatic switching" }!
+        workCheck.performClick(nil)
+        expect(store.isAutoSelected("work"), "profile checkbox must persist automatic-switch participation")
+        let autoCheck = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.accessibilityLabel() == "Auto switch profiles" }!
+        autoCheck.performClick(nil)
+        expect(store.autoSwitchEnabled, "footer checkbox must enable automatic switching")
+        defaults.set("work", forKey: "activeDefaultProfile")
+        store.loadPreview([], profiles: ["default", "work"], usage: ["default": quota, "work": quota])
+        let activeRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("work") }!
+        expect(!descendants(activeRow).compactMap { $0 as? NSButton }.contains { $0.title == "Switch" },
+            "the current profile must hide its Switch button")
+        let activeAvatar = descendants(activeRow).compactMap { $0 as? NSButton }.first { $0.accessibilityLabel() == "Account info for work" }!
+        activeAvatar.performClick(nil)
+        let slider = descendants(controller.view).compactMap { $0 as? NSSlider }.first!
+        slider.integerValue = 30
+        _ = slider.sendAction(slider.action, to: slider.target)
+        expect(store.autoThreshold(for: "work") == 30, "Info slider must save its per-profile quota threshold")
 
         // A row action opens the other destination without changing the default.
         defaults.set(OpenDestination.terminal.rawValue, forKey: "openDestination")

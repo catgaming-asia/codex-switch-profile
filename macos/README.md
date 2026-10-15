@@ -53,13 +53,24 @@ open, so it never launches the previous profile.
 Every row's actions menu offers **Open in ChatGPT** and **Open in Terminal**,
 which use that destination once without changing the default. Profile rows
 also offer **Add workspace…** for that profile and **Sign in to Codex CLI…**.
-Named profile rows additionally offer **Remove profile…**. Their **Switch** button
+Named profile rows additionally offer **Rename profile…** and **Remove profile…**. Rename moves the
+profile home, workspace bindings, and managed launcher after its window is closed. Their **Switch** button
 asks for confirmation, closes all running instances of
 the signed Desktop app, saves the previous default `auth.json` as a private
-backup in `~/.codex`, copies the selected credential, reopens default and
-refreshes usage. Removal asks for confirmation, then permanently deletes the
+backup in `~/.codex`, copies the selected credential, reopens default only if
+Desktop was running, and refreshes usage. Removal asks for confirmation, then permanently deletes the
 named profile home and its workspace bindings. `default` cannot be removed
 from this menu.
+The profile last switched into `default` has no **Switch** button. `default`
+has a green row; profiles checked for automatic switching have yellow rows.
+The checkbox beside **Add profile…** enables automatic switching, and each
+profile's checkbox controls whether it participates. The avatar's Info panel
+has a per-profile slider for the remaining-quota threshold (10% by default).
+When the active profile reaches its threshold, the app chooses the checked
+named profile with the most quota remaining above its own threshold. It uses
+fresh Codex CLI readings and leaves Desktop closed if it was closed. The
+current profile marker records switches made by this menu; it does not verify
+the account inside Desktop or track changes made elsewhere.
 Actions that cannot apply, such as revealing a missing folder, are disabled.
 
 ↑/↓ selects available profiles or projects; Return opens the selection.
@@ -157,9 +168,8 @@ use those readings when enabled. Checks stop when the app quits, and no reader s
 when no profile is initialized. A login launch lists profiles once; profiles
 created outside the app join the checks the next time the menu opens.
 
-The app never switches profiles or accounts for you. It shows the numbers
-and you choose which profile to open. This is deliberate: Codex Profiles
-separates local state and is not a tool for evading rate limits.
+Automatic switching is off by default and requires selecting participating
+profiles. Low-quota alerts remain separate from that setting.
 
 ## System appearance and accessibility
 

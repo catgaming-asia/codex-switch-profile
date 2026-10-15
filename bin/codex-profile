@@ -162,6 +162,11 @@ $PROGRAM clone-config personal work --force"
       options='--yes, -y | Skip the confirmation prompt.'
       examples="$PROGRAM remove work"
       ;;
+    rename)
+      syntax='rename <old-profile> <new-profile>'
+      description='Rename a closed named profile, keeping its authentication, sessions, workspace bindings, and managed launcher.'
+      examples="$PROGRAM rename work client"
+      ;;
     list)
       syntax='list [--details]'
       description='List initialized profiles. Plain output prints one name per line for scripts.'
@@ -400,6 +405,7 @@ init <profile> [--share-with <source-profile>]
 detach <profile> | Make shared configuration independent
 clone-config <source-profile> <target-profile> [--force]
 remove <profile> [--yes]
+rename <old-profile> <new-profile>
 list [--details] | Names, or profile overview cards
 path <profile> | Print the Codex home path
 
@@ -2750,6 +2756,147 @@ command_remove() {
   note "Removed $profile ($codex_home)"
 }
 
+profile_desktop_is_running() {
+  local profile_home="$1" command_line
+  [[ "$(uname -s)" == Darwin ]] || return 1
+  while IFS= read -r command_line; do
+    [[ "$command_line" != *"--user-data-dir=$profile_home/electron-user-data"* ]] || return 0
+  done < <(ps -ww -axo command= 2> /dev/null)
+  return 1
+}
+
+# An EXIT trap restores each committed step in reverse order. The state lock
+# stays held until this function has finished restoring or cleaning up.
+rename_rollback() {
+  local rollback_failed=no
+  if [[ "${RENAME_COMPLETED:-no}" != yes ]]; then
+    if [[ "${RENAME_NEW_REGISTRY_INSTALLED:-no}" == yes ]]; then
+      rm -f -- "$WORKSPACE_REGISTRY" || { warn "Cannot remove new workspace registry: $WORKSPACE_REGISTRY"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_OLD_REGISTRY_MOVED:-no}" == yes ]]; then
+      mv "$RENAME_STAGE/old.workspaces" "$WORKSPACE_REGISTRY" || { warn "Cannot restore workspace registry: $WORKSPACE_REGISTRY"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_NEW_STATE_INSTALLED:-no}" == yes ]]; then
+      rm -f -- "$RENAME_NEW_STATE" || { warn "Cannot remove new launcher state: $RENAME_NEW_STATE"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_OLD_STATE_MOVED:-no}" == yes ]]; then
+      mv "$RENAME_STAGE/old.state" "$RENAME_OLD_STATE" || { warn "Cannot restore launcher state: $RENAME_OLD_STATE"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_NEW_LAUNCHER_INSTALLED:-no}" == yes ]]; then
+      rm -rf -- "$RENAME_NEW_LAUNCHER" || { warn "Cannot remove new launcher: $RENAME_NEW_LAUNCHER"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_OLD_LAUNCHER_MOVED:-no}" == yes ]]; then
+      mv "$RENAME_LAUNCHER_BACKUP" "$RENAME_OLD_LAUNCHER" || { warn "Cannot restore launcher: $RENAME_OLD_LAUNCHER"; rollback_failed=yes; }
+    fi
+    if [[ "${RENAME_HOME_MOVED:-no}" == yes ]]; then
+      mv "$RENAME_TARGET_HOME" "$RENAME_SOURCE_HOME" || { warn "Cannot restore profile home: $RENAME_SOURCE_HOME"; rollback_failed=yes; }
+    fi
+  fi
+  if [[ "$rollback_failed" == yes ]]; then
+    warn "Rename rollback incomplete; preserved staging data at $RENAME_STAGE and launcher backup at ${RENAME_LAUNCHER_BACKUP:-none}."
+    return 0
+  fi
+  if [[ -n "${RENAME_LAUNCHER_BACKUP:-}" && -e "$RENAME_LAUNCHER_BACKUP" ]]; then
+    rm -rf -- "$RENAME_LAUNCHER_BACKUP" || warn "Cannot clean launcher backup: $RENAME_LAUNCHER_BACKUP"
+  fi
+  if [[ -n "${RENAME_STAGE:-}" && -d "$RENAME_STAGE" ]]; then
+    rm -rf -- "$RENAME_STAGE" || warn "Cannot clean rename staging directory: $RENAME_STAGE"
+  fi
+}
+
+command_rename() {
+  local old="${1:-}" new="${2:-}" dependents line line_number=0 name color launcher_path new_launcher_path
+  [[ "$#" -eq 2 ]] || die "Usage: $PROGRAM rename <old-profile> <new-profile>"
+  validate_profile "$old"
+  validate_profile "$new"
+  [[ "$old" != default && "$new" != default ]] || die "The default profile cannot be renamed."
+  [[ "$old" != "$new" ]] || die "Choose a different profile name."
+
+  state_lock_acquire
+  workspace_registry_validate
+  require_initialized_profile "$old"
+  RENAME_SOURCE_HOME="$(codex_home_for_profile "$old")"
+  RENAME_TARGET_HOME="$(codex_home_for_profile "$new")"
+  [[ ! -e "$RENAME_TARGET_HOME" && ! -L "$RENAME_TARGET_HOME" ]] || die "Target profile path already exists: $RENAME_TARGET_HOME"
+  profile_desktop_is_running "$RENAME_SOURCE_HOME" && die "Close the '$old' ChatGPT/Codex window before renaming it."
+  dependents="$(profile_shared_dependents "$old" | LC_ALL=C sort -u | tr '\n' ' ')"
+  [[ -z "$dependents" ]] || die "Cannot rename '$old'; shared configuration is used by: ${dependents% }. Detach those profiles first."
+
+  RENAME_OLD_STATE="$(launcher_state_file "$old")"
+  RENAME_NEW_STATE="$(launcher_state_file "$new")"
+  [[ ! -e "$RENAME_NEW_STATE" && ! -L "$RENAME_NEW_STATE" ]] || die "Target launcher state already exists: $RENAME_NEW_STATE"
+  RENAME_OLD_LAUNCHER=""
+  RENAME_NEW_LAUNCHER=""
+  RENAME_LAUNCHER_BACKUP=""
+  if [[ -e "$RENAME_OLD_STATE" || -L "$RENAME_OLD_STATE" ]]; then
+    launcher_load_state "$old" || die "Refusing invalid launcher state: $RENAME_OLD_STATE"
+    RENAME_OLD_LAUNCHER="$LAUNCHER_STATE_PATH"
+    launcher_is_managed_for_profile "$RENAME_OLD_LAUNCHER" "$old" || die "Refusing missing or unmanaged launcher: $RENAME_OLD_LAUNCHER"
+    name="$LAUNCHER_STATE_NAME"
+    color="$LAUNCHER_STATE_COLOR"
+    [[ "$name" != "ChatGPT $old" ]] || name="ChatGPT $new"
+    validate_launcher_name "$name"
+    RENAME_NEW_LAUNCHER="$CODEX_PROFILE_LAUNCHER_ROOT/$name.app"
+    if [[ "$RENAME_NEW_LAUNCHER" != "$RENAME_OLD_LAUNCHER" ]]; then
+      [[ ! -e "$RENAME_NEW_LAUNCHER" && ! -L "$RENAME_NEW_LAUNCHER" ]] || die "Target launcher path already exists: $RENAME_NEW_LAUNCHER"
+    fi
+    RENAME_LAUNCHER_BACKUP="$CODEX_PROFILE_LAUNCHER_ROOT/.codex-profile-rename.$$.app"
+    [[ ! -e "$RENAME_LAUNCHER_BACKUP" && ! -L "$RENAME_LAUNCHER_BACKUP" ]] || die "Launcher backup path already exists: $RENAME_LAUNCHER_BACKUP"
+  fi
+
+  RENAME_STAGE="$(mktemp -d "$CODEX_PROFILE_CONFIG_HOME/.rename.XXXXXX")" || die "Cannot create rename staging directory."
+  RENAME_COMPLETED=no
+  RENAME_HOME_MOVED=no
+  RENAME_OLD_LAUNCHER_MOVED=no
+  RENAME_NEW_LAUNCHER_INSTALLED=no
+  RENAME_OLD_STATE_MOVED=no
+  RENAME_NEW_STATE_INSTALLED=no
+  RENAME_OLD_REGISTRY_MOVED=no
+  RENAME_NEW_REGISTRY_INSTALLED=no
+  trap 'rename_rollback; state_lock_release' EXIT
+  chmod 700 "$RENAME_STAGE" || die "Cannot protect rename staging directory: $RENAME_STAGE"
+
+  if [[ -n "$RENAME_OLD_LAUNCHER" ]]; then
+    launcher_build_bundle "$RENAME_STAGE/new.app" "$new" "$name" "$color"
+    printf '%s\n%s\n%s\n%s\n' "$new" "$name" "$color" "$RENAME_NEW_LAUNCHER" > "$RENAME_STAGE/new.state" || die "Cannot stage launcher state."
+    chmod 600 "$RENAME_STAGE/new.state" || die "Cannot protect staged launcher state."
+  fi
+  if [[ -f "$WORKSPACE_REGISTRY" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line_number=$((line_number + 1))
+      workspace_parse_registry_line "$line" "$line_number" || continue
+      if [[ "$WORKSPACE_ROW_PROFILE" == "$old" ]]; then
+        printf '%s\t%s\n' "$WORKSPACE_ROW_PATH" "$new" >> "$RENAME_STAGE/new.workspaces" || die "Cannot stage workspace registry."
+      else
+        printf '%s\n' "$line" >> "$RENAME_STAGE/new.workspaces" || die "Cannot stage workspace registry."
+      fi
+    done < "$WORKSPACE_REGISTRY"
+    [[ -f "$RENAME_STAGE/new.workspaces" ]] || : > "$RENAME_STAGE/new.workspaces"
+    chmod 600 "$RENAME_STAGE/new.workspaces" || die "Cannot protect staged workspace registry."
+  fi
+
+  mv "$RENAME_SOURCE_HOME" "$RENAME_TARGET_HOME" || die "Cannot move profile home to: $RENAME_TARGET_HOME"
+  RENAME_HOME_MOVED=yes
+  if [[ -n "$RENAME_OLD_LAUNCHER" ]]; then
+    mv "$RENAME_OLD_LAUNCHER" "$RENAME_LAUNCHER_BACKUP" || die "Cannot stage old launcher."
+    RENAME_OLD_LAUNCHER_MOVED=yes
+    mv "$RENAME_STAGE/new.app" "$RENAME_NEW_LAUNCHER" || die "Cannot install renamed launcher."
+    RENAME_NEW_LAUNCHER_INSTALLED=yes
+    mv "$RENAME_OLD_STATE" "$RENAME_STAGE/old.state" || die "Cannot stage old launcher state."
+    RENAME_OLD_STATE_MOVED=yes
+    mv "$RENAME_STAGE/new.state" "$RENAME_NEW_STATE" || die "Cannot install renamed launcher state."
+    RENAME_NEW_STATE_INSTALLED=yes
+  fi
+  if [[ -f "$WORKSPACE_REGISTRY" ]]; then
+    mv "$WORKSPACE_REGISTRY" "$RENAME_STAGE/old.workspaces" || die "Cannot stage old workspace registry."
+    RENAME_OLD_REGISTRY_MOVED=yes
+    mv "$RENAME_STAGE/new.workspaces" "$WORKSPACE_REGISTRY" || die "Cannot install renamed workspace registry."
+    RENAME_NEW_REGISTRY_INSTALLED=yes
+  fi
+  RENAME_COMPLETED=yes
+  note "Renamed profile $old to $new ($RENAME_TARGET_HOME)"
+}
+
 login_status_is_logged_out() {
   local status_output="$1"
   local normalized
@@ -4429,7 +4576,7 @@ _codex_profile_candidates() {
   candidate_words=''
   complete_dirs=no
   if [[ "$#" -eq 0 ]]; then
-    candidate_words='app app-instance cli login init setup detach remove launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help'
+    candidate_words='app app-instance cli login init setup detach remove rename launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help'
     return 0
   fi
   shift
@@ -4469,6 +4616,9 @@ _codex_profile_candidates() {
       ;;
     remove)
       if [[ "$#" -eq 0 ]]; then profiles=yes; else candidate_words='--yes -y'; fi
+      ;;
+    rename)
+      [[ "$#" -ne 0 ]] || profiles=yes
       ;;
     status)
       candidate_words='--json -j'
@@ -4542,7 +4692,7 @@ _codex_profile_candidates() {
     list) [[ "$#" -ne 0 ]] || candidate_words='--details' ;;
     help)
       if [[ "$#" -eq 0 ]]; then
-        candidate_words='app app-instance cli login init setup detach remove launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help'
+        candidate_words='app app-instance cli login init setup detach remove rename launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help'
       elif [[ "$#" -eq 1 ]]; then
         case "$1" in
           workspace) candidate_words='bind unbind list status guard' ;;
@@ -4629,7 +4779,7 @@ function __codex_profile_complete
     set -l profiles no
     set -l directories no
     if test (count $args) -eq 0
-        printf '%s\n' app app-instance cli login init setup detach remove launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help
+        printf '%s\n' app app-instance cli login init setup detach remove rename launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help
         return
     end
     set -l cmd $args[1]
@@ -4687,6 +4837,8 @@ function __codex_profile_complete
             else
                 set candidates --yes -y
             end
+        case rename
+            test $count -ne 0; or set profiles yes
         case status env clone-config
             set -l limit 1
             switch $cmd
@@ -4772,7 +4924,7 @@ function __codex_profile_complete
             string match -q -- '-*' "$cur"; or set profiles yes
         case help
             if test $count -eq 0
-                set candidates app app-instance cli login init setup detach remove launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help
+                set candidates app app-instance cli login init setup detach remove rename launcher workspace run status usage path env use logs clone-config list doctor completions shell-init upgrade version help
             else if test $count -eq 1
                 switch $args[1]
                     case workspace
@@ -5187,6 +5339,9 @@ main() {
       ;;
     remove)
       command_remove "$@"
+      ;;
+    rename)
+      command_rename "$@"
       ;;
     launcher)
       command_launcher "$@"

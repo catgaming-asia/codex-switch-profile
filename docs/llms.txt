@@ -288,6 +288,9 @@ visible in Finder, Launchpad, and on a pinned Dock launcher. The active ChatGPT
 process retains its native name and icon. `launcher list [--json]`, `launcher
 path <profile>`, and `launcher remove <profile> [--yes]` inspect and remove only
 managed launchers; profile authentication and Electron data are preserved.
+`codex-profile rename <old-profile> <new-profile>` renames a closed named
+profile, moves its private home, updates workspace bindings, and rebuilds a
+managed launcher. The default profile cannot be renamed.
 
 `CODEX_PROFILE_LAUNCHER_ROOT` overrides the default `~/Applications` location.
 Changing a managed launcher's name or color requires `--force`. Profile removal

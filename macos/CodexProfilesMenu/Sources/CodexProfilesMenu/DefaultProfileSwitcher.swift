@@ -164,7 +164,7 @@ struct ProfileAuthTransfer {
 
 @MainActor
 struct DefaultProfileSwitcher {
-    func switchToDefault(from profile: String, client: CLIClient) async throws -> URL? {
+    func switchToDefault(from profile: String, client: CLIClient) async throws -> (backup: URL?, restarted: Bool) {
         let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory())
         let transfer = ProfileAuthTransfer()
         try transfer.validateSource(profile, home: home)
@@ -175,6 +175,7 @@ struct DefaultProfileSwitcher {
             $0.bundleURL?.resolvingSymlinksInPath().standardizedFileURL == appURL.resolvingSymlinksInPath().standardizedFileURL
                 && !$0.isTerminated
         }
+        let shouldRestart = !running.isEmpty
         for application in running {
             guard application.terminate() else { throw DefaultProfileSwitchError.desktopDidNotQuit }
         }
@@ -188,17 +189,19 @@ struct DefaultProfileSwitcher {
         do {
             backup = try transfer.copyToDefault(from: profile, home: home)
         } catch {
-            try? await client.launch(.profile("default"), in: .chatGPT)
+            if shouldRestart { try? await client.launch(.profile("default"), in: .chatGPT) }
             throw error
         }
-        do {
-            try await client.launch(.profile("default"), in: .chatGPT)
-        } catch {
-            let recovery = backup.map { "The previous default authentication is saved at \($0.path)." }
-                ?? "There was no previous default authentication."
-            throw DefaultProfileSwitchError.reopenFailed("Default authentication was changed, but Desktop could not reopen: \(error.localizedDescription) \(recovery)")
+        if shouldRestart {
+            do {
+                try await client.launch(.profile("default"), in: .chatGPT)
+            } catch {
+                let recovery = backup.map { "The previous default authentication is saved at \($0.path)." }
+                    ?? "There was no previous default authentication."
+                throw DefaultProfileSwitchError.reopenFailed("Default authentication was changed, but Desktop could not reopen: \(error.localizedDescription) \(recovery)")
+            }
         }
-        return backup
+        return (backup, shouldRestart)
     }
 
     private func desktopAppURL() throws -> URL {

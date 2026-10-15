@@ -146,8 +146,9 @@ notification opens the popover. While alerts are on, a five-minute loop with
 timer tolerance calls the same refreshUsage path, so the cache, two readers,
 deadlines and owned-process cleanup are unchanged; turning alerts off or
 Quit stops it, and no reader starts without initialized profiles. The app
-never switches profiles or accounts automatically: alerts show the numbers
-and the person chooses. The decision logic is plain Foundation behind a
+does not itself switch profiles or accounts: alerts show the numbers. A separate
+opt-in policy switches only among checked profiles using fresh readings and
+per-profile thresholds. The alert decision logic is plain Foundation behind a
 notifier protocol, so tests never touch UNUserNotificationCenter.
 
 Render previews from the actual view in Aqua and Dark Aqua on an opaque

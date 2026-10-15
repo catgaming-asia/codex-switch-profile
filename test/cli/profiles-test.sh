@@ -390,6 +390,50 @@ test_remove_aborts_when_confirmation_does_not_match() {
   rm -rf "$tmp"
 }
 
+test_rename_preserves_profile_data_and_workspace_bindings() {
+  local tmp workspace
+  tmp="$(mktemp -d)"
+  workspace="$tmp/project"
+  mkdir -p "$tmp/home/.codex-Kuruby/sessions" "$workspace"
+  printf 'opaque auth\n' > "$tmp/home/.codex-Kuruby/auth.json"
+  printf 'session\n' > "$tmp/home/.codex-Kuruby/sessions/one.json"
+  run_cmd env HOME="$tmp/home" CODEX_PROFILE_CONFIG_HOME="$tmp/config" "$SCRIPT" workspace bind "$workspace" Kuruby
+  assert_status 0
+
+  run_cmd env HOME="$tmp/home" CODEX_PROFILE_CONFIG_HOME="$tmp/config" "$SCRIPT" rename Kuruby abcxyz
+  assert_status 0
+  assert_contains "Renamed profile Kuruby to abcxyz"
+  [[ ! -e "$tmp/home/.codex-Kuruby" ]] || fail "rename kept the old home"
+  [[ "$(cat "$tmp/home/.codex-abcxyz/auth.json")" == 'opaque auth' ]] || fail "rename changed auth.json"
+  [[ "$(cat "$tmp/home/.codex-abcxyz/sessions/one.json")" == 'session' ]] || fail "rename changed sessions"
+  [[ "$(cut -f2 "$tmp/config/workspaces.tsv")" == abcxyz ]] || fail "rename did not update workspace binding"
+
+  run_cmd env HOME="$tmp/home" CODEX_PROFILE_CONFIG_HOME="$tmp/config" "$SCRIPT" rename abcxyz default
+  assert_status 1
+  assert_contains "default profile cannot be renamed"
+  run_cmd env HOME="$tmp/home" CODEX_PROFILE_CONFIG_HOME="$tmp/config" "$SCRIPT" rename abcxyz Kuruby
+  assert_status 0
+  rm -rf "$tmp"
+}
+
+test_rename_refuses_existing_target_and_shared_dependents() {
+  local tmp
+  tmp="$(mktemp -d)"
+  mkdir -p "$tmp/home/.codex-work" "$tmp/home/.codex-client"
+  run_cmd env HOME="$tmp/home" "$SCRIPT" rename work client
+  assert_status 1
+  assert_contains "Target profile path already exists"
+  rm -rf "$tmp/home/.codex-client"
+  printf 'config\n' > "$tmp/home/.codex-work/AGENTS.md"
+  run_cmd env HOME="$tmp/home" "$SCRIPT" init client --share-with work
+  assert_status 0
+  run_cmd env HOME="$tmp/home" "$SCRIPT" rename work office
+  assert_status 1
+  assert_contains "shared configuration is used by"
+  [[ -d "$tmp/home/.codex-work" && ! -e "$tmp/home/.codex-office" ]] || fail "failed rename moved source home"
+  rm -rf "$tmp"
+}
+
 test_remove_yes_deletes_profile_home() {
   local tmp profile_home
   tmp="$(mktemp -d)"
@@ -580,6 +624,8 @@ test_init_share_with_rejects_invalid_sources_and_usage
 test_init_share_with_refuses_every_existing_target_path
 test_init_share_with_cleans_up_after_link_failure
 test_remove_aborts_when_confirmation_does_not_match
+test_rename_preserves_profile_data_and_workspace_bindings
+test_rename_refuses_existing_target_and_shared_dependents
 test_remove_yes_deletes_profile_home
 test_remove_yes_deletes_profiles_named_like_common_aliases
 test_remove_refuses_profiles_with_shared_configuration_dependents

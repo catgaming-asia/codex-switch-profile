@@ -10,15 +10,18 @@ and this project follows semantic versioning for tagged releases.
 ### Added
 
 - Added an optional `auth.json` picker to the macOS **Create a profile** dialog. A new named profile can receive the selected credential file without copying any other profile state; the menu then refreshes its Codex usage.
-- Added **Switch** buttons to named profiles in the macOS menu. They ask for confirmation, quit the signed Desktop app, privately back up the previous default `auth.json`, copy the selected profile's authentication into default, reopen default and refresh usage. Profile row clicks only select; **Open in ChatGPT** is in the actions menu. The `default` row has no primary action button.
+- Added **Switch** buttons to named profiles in the macOS menu. They ask for confirmation, quit the signed Desktop app when running, privately back up the previous default `auth.json`, copy the selected profile's authentication into default, reopen it only when it was running, and refresh usage. Profile row clicks only select; **Open in ChatGPT** is in the actions menu. The `default` row has no primary action button.
 - Added **Add profile…** beside **Add workspace…** in the macOS menu footer.
 - Added **Remove profile…** to named profiles in the macOS menu, with a deletion confirmation and refreshed profile and workspace lists.
+- Added **Rename profile…** to named profiles. The CLI `rename <old-profile> <new-profile>` moves the closed profile's home, updates workspace bindings, and rebuilds its managed launcher while preserving private state.
 - Added `default` profile `5h` and weekly quota percentages beside the menu-bar icon, with periodic refresh and an icon-only state when usage is unavailable.
 - Added a persistent **Hide profile names** toggle in the macOS gear menu for screenshots; profile names are masked in rows, filters, and menus until shown again.
 - Added an avatar action that opens a profile Info page with Codex CLI quota, reset times and last check, plus Back navigation.
 
 ### Changed
 
+- **Switch** now restarts Desktop only when it was already running; switching while Desktop is closed leaves it closed.
+- Added an opt-in automatic profile switch using fresh Codex CLI quota, per-profile participation checkboxes and thresholds in Info, plus active/selected row cues.
 - Removed the macOS menu Search field and Command-K shortcut; the profile filter remains.
 
 - Made the macOS menu-bar app the README's main entry point, with native

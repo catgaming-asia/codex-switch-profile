@@ -103,8 +103,8 @@ The first launch of a named window may require signing into ChatGPT. Reopening
 the same name reuses that name's Desktop process and data. Different names can
 run side by side. The launcher uses the original signed `ChatGPT.app`; it does
 not clone, patch, re-sign, or replace the installed app. The explicit
-**Switch** button on a named profile requests a graceful quit before copying
-authentication.
+**Switch** button and separately enabled automatic switch request a graceful
+quit before copying authentication when Desktop is running.
 
 ## How profiles map to disk
 
@@ -375,8 +375,8 @@ initialized.
   its Electron context, while Codex also receives the matching `CODEX_HOME`.
   Account identity still must be verified in the relevant UI.
 - Opening a named window never quits the stock window or another profile.
-  The separately confirmed **Switch** button on a named profile does quit all
-  running windows of the same signed app before reopening default.
+  The separately confirmed **Switch** button and opted-in automatic switch
+  gracefully quit running windows of the same signed app before reopening default.
 
 ### Add named, color-coded macOS launchers
 
@@ -453,7 +453,7 @@ installation, but Terminal launches, Codex CLI sign-in and quota readings use
 the official Codex CLI. Quota belongs to each profile's Codex CLI sign-in; a
 named ChatGPT window may use a different account. The create-profile picker
 can install one selected `auth.json` in a new named home; the confirmed
-**Switch** button copies one into default. Neither parses or
+**Switch** button and opted-in automatic switch copy one into default. Neither parses or
 prints tokens or cookies. See the [macOS guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md) for keyboard shortcuts, quota
 details, and Developer ID signing.
 
@@ -683,6 +683,7 @@ codex-profile login <profile> [codex-login-args...]
 codex-profile init <profile> [--share-with <source-profile>]
 codex-profile setup <profile>
 codex-profile detach <profile>
+codex-profile rename <old-profile> <new-profile>
 codex-profile remove <profile> [--yes]
 codex-profile launcher create <profile> [--name <display-name>] [--color <color>] [--force]
 codex-profile launcher list [--json]
@@ -783,7 +784,7 @@ contains no profile data; disable it with `CODEX_PROFILE_NO_UPDATE_CHECK=1` or
 CLI-oriented commands and launcher inspection are tested on macOS and Ubuntu/Linux:
 
 ```text
-cli login init setup detach remove workspace run status path env use logs clone-config list doctor completions shell-init upgrade version help
+cli login init setup detach remove rename workspace run status path env use logs clone-config list doctor completions shell-init upgrade version help
 ```
 
 `app` and `launcher create` are macOS-only. They detect the installed integrated `ChatGPT.app` and
@@ -880,9 +881,9 @@ Sharing one chat pool across people on a single Mac means one real Desktop
 `CODEX_HOME`. Separate ChatGPT logins then need that account's `auth.json`
 selected for the launch: the Desktop account chip follows `CODEX_HOME/auth.json`,
 not Electron user-data alone. The macOS menu offers an explicit, confirmed
-**Switch** button that copies a named profile's opaque `auth.json`
-into default after backing up the previous file. Do not add `--shared-home`
-or automatic token sharing.
+**Switch** button and an opt-in automatic switch that copy a named profile's
+opaque `auth.json` into default after backing up the previous file. Do not
+add `--shared-home` or implicit token syncing beyond that opt-in feature.
 
 ## AI assistants
 

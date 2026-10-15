@@ -114,14 +114,16 @@ Profile-to-path mapping: `default -> ~/.codex`; any other name `<x> -> ~/.codex-
   matching `CODEX_HOME` and Electron data for the entire ChatGPT window.
 - Do not add `--shared-home` or store-level session symlinks. The macOS menu's
   optional create-profile file picker copies one chosen `auth.json` into a new
-  named home, and a named profile's **Switch** button copies its credential
-  into default while retaining a private backup. Current Codex
+  named home. A named profile's **Switch** button or the separately opted-in
+  automatic switch copies its credential into default while retaining a private
+  backup. Current Codex
   Desktop canonicalizes rollout paths, so a `sessions/`
   link that escapes `CODEX_HOME` breaks fork and side chats. Desktop identity
   follows `CODEX_HOME/auth.json`, not Electron data alone.
 - Desktop code must launch the original signed bundle. Do not reintroduce app
-  clones, metadata patching, ad-hoc signing, or broad kills. Only the explicit
-  named profile **Switch** button may request a graceful quit of that app.
+  clones, metadata patching, ad-hoc signing, or broad kills. The explicit
+  named profile **Switch** button and the user-enabled automatic switch may
+  request a graceful quit of that app.
 - Keep `--instance`, `--rebuild`, and `app-instance` as deprecated
   compatibility spellings until a documented breaking release.
 - AUR scripts may prepare and verify only. The maintainer-owned, reviewed AUR
@@ -140,8 +142,9 @@ link.
 ## Safety boundaries (state these accurately)
 
 - CLI-oriented commands select `CODEX_HOME`; named Desktop launches also select
-  per-profile Electron user data. The macOS create-profile picker and confirmed
-  named profile **Switch** button copy opaque `auth.json` bytes; no command parses,
+  per-profile Electron user data. The macOS create-profile picker, confirmed
+  named profile **Switch** button, and opted-in automatic switch copy opaque
+  `auth.json` bytes; no command parses,
   prints, compares, or uploads tokens or ChatGPT cookies.
 - `clone-config` copies only an allowlist of non-secret root config files and
   refuses sensitive-looking key names.

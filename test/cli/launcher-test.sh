@@ -147,6 +147,43 @@ test_launcher_create_is_idempotent_and_force_replaces_managed_bundle() {
   rm -rf "$tmp"
 }
 
+test_rename_rebuilds_managed_launcher() {
+  local tmp old_app new_app
+  tmp="$(mktemp -d)"
+  old_app="$tmp/apps/ChatGPT work.app"
+  new_app="$tmp/apps/ChatGPT office.app"
+  prepare_launcher_test "$tmp" work
+  run_cmd launcher_env "$tmp" "$SCRIPT" launcher create work --color blue
+  assert_status 0
+  [[ -d "$old_app" ]] || fail "launcher was not created"
+
+  run_cmd launcher_env "$tmp" "$SCRIPT" rename work office
+  assert_status 0
+  [[ ! -e "$old_app" && -d "$new_app" ]] || fail "rename did not move launcher"
+  grep -Fq "app 'office'" "$new_app/Contents/MacOS/launch-profile" || fail "renamed launcher still routes to old profile"
+  [[ ! -e "$tmp/config/launchers/work.state" && -f "$tmp/config/launchers/office.state" ]] || fail "rename did not move launcher state"
+  run_cmd launcher_env "$tmp" "$SCRIPT" launcher path office
+  assert_status 0
+  assert_equals "$new_app"
+  rm -rf "$tmp"
+}
+
+test_rename_refuses_running_profile() {
+  local tmp
+  tmp="$(mktemp -d)"
+  prepare_launcher_test "$tmp" work
+  cat > "$tmp/bin/ps" <<'FAKE_PS'
+#!/usr/bin/env bash
+printf 'ChatGPT --user-data-dir=%s/.codex-work/electron-user-data\n' "$HOME"
+FAKE_PS
+  chmod 755 "$tmp/bin/ps"
+  run_cmd launcher_env "$tmp" "$SCRIPT" rename work office
+  assert_status 1
+  assert_contains "Close the 'work' ChatGPT/Codex window"
+  [[ -d "$tmp/home/.codex-work" && ! -e "$tmp/home/.codex-office" ]] || fail "rename moved a running profile"
+  rm -rf "$tmp"
+}
+
 test_launcher_refuses_invalid_inputs_and_unmanaged_collisions() {
   local tmp
   tmp="$(mktemp -d)"
@@ -285,6 +322,8 @@ test_launcher_recovers_after_the_bundle_is_deleted_outside_the_cli() {
 
 test_launcher_create_list_and_path_are_deterministic
 test_launcher_create_is_idempotent_and_force_replaces_managed_bundle
+test_rename_rebuilds_managed_launcher
+test_rename_refuses_running_profile
 test_launcher_refuses_invalid_inputs_and_unmanaged_collisions
 test_launcher_cleans_up_a_failed_icon_build
 test_launcher_remove_preserves_profile_data

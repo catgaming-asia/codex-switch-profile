@@ -12,6 +12,8 @@ final class WorkspaceMenuViewController: NSViewController {
             let launching: Bool
             let changing: Bool
             let enabled: Bool
+            let active: Bool
+            let autoSelected: Bool
         }
 
         let destination: OpenDestination
@@ -39,6 +41,7 @@ final class WorkspaceMenuViewController: NSViewController {
     private let refreshButton = NSButton()
     private let addButton = NSButton()
     private let addProfileButton = NSButton()
+    private let autoSwitchButton = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
     private var rows: [LaunchRowButton] = []
     private var scrollView: NSScrollView?
     private var selectedID: LaunchTarget.ID?
@@ -51,6 +54,7 @@ final class WorkspaceMenuViewController: NSViewController {
     private var renderedNamesHidden: Bool?
     private var pendingAuthSelection: URL?
     private var authSelectionLabel: NSTextField?
+    private var autoThresholdLabel: NSTextField?
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
     var onRequestClose: (() -> Void)?
     var onProfileNameVisibilityChange: (() -> Void)?
@@ -203,13 +207,19 @@ final class WorkspaceMenuViewController: NSViewController {
         addProfileButton.font = .systemFont(ofSize: 12)
         addProfileButton.toolTip = "Create a profile, optionally using auth.json"
         addProfileButton.setContentHuggingPriority(.required, for: .horizontal)
+        autoSwitchButton.target = self
+        autoSwitchButton.action = #selector(toggleAutoSwitch(_:))
+        autoSwitchButton.font = .systemFont(ofSize: 11)
+        autoSwitchButton.toolTip = "Automatically switch to a selected profile when the current profile reaches its quota threshold"
+        autoSwitchButton.setAccessibilityLabel("Auto switch profiles")
+        autoSwitchButton.setContentHuggingPriority(.required, for: .horizontal)
         footerLabel.font = .systemFont(ofSize: 11)
         footerLabel.textColor = .secondaryLabelColor
         footerLabel.lineBreakMode = .byTruncatingTail
         footerLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         footerLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
         configureSymbolButton(refreshButton, symbol: "arrow.clockwise", title: "Refresh profiles, workspaces and Codex usage (⌘R)", action: #selector(refresh))
-        let footer = NSStackView(views: [add, addProfileButton, NSView(), footerLabel, refreshButton])
+        let footer = NSStackView(views: [add, addProfileButton, autoSwitchButton, NSView(), footerLabel, refreshButton])
         footer.orientation = .horizontal
         footer.alignment = .centerY
         footer.spacing = 8
@@ -251,6 +261,8 @@ final class WorkspaceMenuViewController: NSViewController {
         toolbarHeightConstraint?.constant = toolbar.isHidden ? 0 : 24
         addButton.isHidden = !populated || showingInfo || store.profiles.isEmpty
         addProfileButton.isHidden = !populated || showingInfo
+        autoSwitchButton.isHidden = !populated || showingInfo
+        autoSwitchButton.state = store.autoSwitchEnabled ? .on : .off
         footerLabel.stringValue = hideProfileNames || ["Choose a profile or workspace", "Create a profile to get started"].contains(store.statusMessage)
             ? "" : store.statusMessage
         footerLabel.toolTip = footerLabel.stringValue
@@ -308,7 +320,9 @@ final class WorkspaceMenuViewController: NSViewController {
                 pinned: item.workspace.map(store.isPinned) ?? false,
                 launching: store.launchingID == item.id,
                 changing: store.isChanging(item),
-                enabled: store.canLaunch(item) && store.launchingID == nil
+                enabled: store.canLaunch(item) && store.launchingID == nil,
+                active: item.workspace == nil && store.activeProfile == item.profile,
+                autoSelected: item.workspace == nil && store.isAutoSelected(item.profile)
             )
         })
     }
@@ -371,9 +385,14 @@ final class WorkspaceMenuViewController: NSViewController {
             let row = LaunchRowButton(item: item, shortcutIndex: index, destination: list.destination,
                 usage: item.workspace == nil ? store.usageState(for: item.profile) : nil, pinned: model.pinned,
                 selected: selectedID == item.id, launching: model.launching, changing: model.changing,
-                enabled: model.enabled, hideProfileNames: hideProfileNames, target: self, action: #selector(launchClicked(_:)))
+                enabled: model.enabled, active: model.active, autoSelected: model.autoSelected,
+                hideProfileNames: hideProfileNames, target: self, action: #selector(launchClicked(_:)))
             row.onShowInfo = { [weak self] in self?.showInfo(for: item.profile) }
             row.onSwitch = { [weak self] in self?.confirmSwitchToDefault(from: item.profile) }
+            row.onAutoSelection = { [weak self] in
+                self?.store.toggleAutoSelection(item.profile)
+                Task { await self?.store.autoSwitchIfNeeded() }
+            }
             row.onShowActions = { [weak self] sender in
                 guard let self else { return }
                 self.actionsMenu(for: item).popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
@@ -488,6 +507,18 @@ final class WorkspaceMenuViewController: NSViewController {
             refreshing.textColor = .secondaryLabelColor
             stack.addArrangedSubview(refreshing)
         }
+        let threshold = store.autoThreshold(for: profile)
+        let thresholdLabel = label("Auto switch at \(threshold)% left", size: 12, weight: .medium)
+        autoThresholdLabel = thresholdLabel
+        stack.addArrangedSubview(thresholdLabel)
+        let slider = NSSlider(value: Double(threshold), minValue: 0, maxValue: 100,
+            target: self, action: #selector(autoThresholdChanged(_:)))
+        slider.numberOfTickMarks = 6
+        slider.allowsTickMarkValuesOnly = false
+        slider.isContinuous = false
+        slider.setAccessibilityLabel("Auto switch threshold for \(visibleProfile(profile))")
+        stack.addArrangedSubview(slider)
+        slider.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         let note = NSTextField(wrappingLabelWithString: "These are Codex CLI limits. The ChatGPT window may use a different account.")
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
@@ -506,6 +537,18 @@ final class WorkspaceMenuViewController: NSViewController {
         selectedID = LaunchTarget.profile(profile).id
         render()
         Task { await store.refreshUsage() }
+    }
+
+    @objc private func autoThresholdChanged(_ sender: NSSlider) {
+        guard let infoProfile else { return }
+        let value = sender.integerValue
+        store.setAutoThreshold(value, for: infoProfile)
+        autoThresholdLabel?.stringValue = "Auto switch at \(value)% left"
+    }
+
+    @objc private func toggleAutoSwitch(_ sender: NSButton) {
+        store.setAutoSwitchEnabled(sender.state == .on)
+        if sender.state == .on { Task { await store.autoSwitchIfNeeded() } }
     }
 
     @objc private func backToProfiles() {
@@ -536,6 +579,9 @@ final class WorkspaceMenuViewController: NSViewController {
             chatGPT.isEnabled = idle && store.canLaunch(item)
             menu.addItem(chatGPT)
             if item.profile != "default" {
+                let rename = menuItem("Rename profile…", #selector(renameProfile(_:)), symbol: "pencil", item.profile)
+                rename.isEnabled = idle && !store.removingProfiles.contains(item.profile)
+                menu.addItem(rename)
                 let remove = menuItem("Remove profile…", #selector(removeProfile(_:)), symbol: "trash", item.profile)
                 remove.isEnabled = idle && !store.removingProfiles.contains(item.profile)
                 menu.addItem(remove)
@@ -671,7 +717,7 @@ final class WorkspaceMenuViewController: NSViewController {
         guard let request = sender.representedObject as? LaunchRequest else { return }
         launch(request.item, in: request.destination)
     }
-    @objc private func refresh() { Task { await store.refresh(); await store.refreshUsage(force: true) } }
+    @objc private func refresh() { Task { await store.refresh(); await store.refreshUsage(force: true); await store.autoSwitchIfNeeded() } }
     @objc private func toggleProfileNames() {
         defaults.set(!hideProfileNames, forKey: "hideProfileNames")
         store.query = ""
@@ -878,7 +924,7 @@ final class WorkspaceMenuViewController: NSViewController {
             let alert = NSAlert()
             alert.alertStyle = .warning
             alert.messageText = "Switch \(self.visibleProfile(profile)) to default?"
-            alert.informativeText = "This quits all open ChatGPT/Codex windows, replaces default auth.json with the selected profile’s authentication, then reopens default and refreshes usage. The previous default auth.json is kept as a private backup."
+            alert.informativeText = "This quits open ChatGPT/Codex windows, replaces default auth.json with the selected profile’s authentication, then restarts Desktop only if it was running and refreshes usage. The previous default auth.json is kept as a private backup."
             alert.addButton(withTitle: "Switch to default")
             alert.addButton(withTitle: "Cancel")
             guard alert.runModal() == .alertFirstButtonReturn else { return }
@@ -904,6 +950,31 @@ final class WorkspaceMenuViewController: NSViewController {
         }
     }
 
+    @objc private func renameProfile(_ sender: NSMenuItem) {
+        guard let profile = sender.representedObject as? String else { return }
+        onRequestClose?()
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let alert = NSAlert()
+            alert.messageText = "Rename profile \(self.visibleProfile(profile))"
+            alert.informativeText = "Enter a new profile name. Close this profile’s ChatGPT/Codex window first. Authentication, sessions, workspaces and settings will move with the profile."
+            let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
+            field.stringValue = profile
+            field.setAccessibilityLabel("New profile name")
+            alert.accessoryView = field
+            alert.addButton(withTitle: "Rename profile")
+            alert.addButton(withTitle: "Cancel")
+            alert.window.initialFirstResponder = field
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            let newName = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard CLIClient.isValidProfileName(newName), newName != "default", newName != profile else {
+                self.presentError("Choose a different, valid profile name.")
+                return
+            }
+            Task { await self.store.renameProfile(profile, to: newName) }
+        }
+    }
+
     private func presentError(_ message: String) {
         // Schedule outside render and menu tracking so the alert gets keyboard focus.
         DispatchQueue.main.async { [weak self] in
@@ -924,6 +995,7 @@ final class LaunchRowButton: NSButton {
     var onShowActions: ((NSButton) -> Void)?
     var onShowInfo: (() -> Void)?
     var onSwitch: (() -> Void)?
+    var onAutoSelection: (() -> Void)?
     var isSelectedRow: Bool { didSet { setAccessibilitySelected(isSelectedRow); needsDisplay = true } }
     private var isHovered = false
     private var tracking: NSTrackingArea?
@@ -932,11 +1004,16 @@ final class LaunchRowButton: NSButton {
     private let profileDetail: String
     private let usageView: ProfileUsageView?
     private let visibleProfileName: String
+    private let isDefaultProfile: Bool
+    private let isAutoSelected: Bool
 
     init(item: LaunchTarget, shortcutIndex: Int, destination: OpenDestination, usage: UsageState?, pinned: Bool, selected: Bool,
-         launching: Bool, changing: Bool, enabled: Bool, hideProfileNames: Bool = false, target: AnyObject?, action: Selector?) {
+         launching: Bool, changing: Bool, enabled: Bool, active: Bool, autoSelected: Bool,
+         hideProfileNames: Bool = false, target: AnyObject?, action: Selector?) {
         self.item = item
         self.destination = destination
+        isDefaultProfile = item.profile == "default" && item.workspace == nil
+        isAutoSelected = autoSelected
         let displayProfile = hideProfileNames ? "••••" : item.profile
         visibleProfileName = displayProfile
         isSelectedRow = selected
@@ -1012,9 +1089,13 @@ final class LaunchRowButton: NSButton {
             warning.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         }
         var primaryAction: NSView
-        if item.profile == "default" && item.workspace == nil {
-            primaryAction = NSView()
-            primaryAction.widthAnchor.constraint(equalToConstant: 56).isActive = true
+        if item.workspace == nil && (item.profile == "default" || active) {
+            let current = NSTextField(labelWithString: active ? "Current" : "")
+            current.font = .systemFont(ofSize: 10, weight: .medium)
+            current.textColor = .secondaryLabelColor
+            current.alignment = .center
+            current.widthAnchor.constraint(equalToConstant: 56).isActive = true
+            primaryAction = current
         } else {
             let actionTitle = item.workspace == nil ? (changing ? "Switching…" : "Switch")
                 : launching ? "Opening…" : changing ? "Updating…" : "Open"
@@ -1037,7 +1118,16 @@ final class LaunchRowButton: NSButton {
         more.isEnabled = !changing
         more.widthAnchor.constraint(equalToConstant: 22).isActive = true
         more.heightAnchor.constraint(equalToConstant: 24).isActive = true
-        var rowViews: [NSView] = [icon, labels]
+        var rowViews: [NSView] = []
+        if item.workspace == nil {
+            let checkbox = NSButton(checkboxWithTitle: "", target: self, action: #selector(toggleAutoTarget(_:)))
+            checkbox.state = autoSelected ? .on : .off
+            checkbox.toolTip = "Include \(visibleProfileName) in automatic switching"
+            checkbox.setAccessibilityLabel(checkbox.toolTip!)
+            checkbox.widthAnchor.constraint(equalToConstant: 16).isActive = true
+            rowViews.append(checkbox)
+        }
+        rowViews += [icon, labels]
         if let usageView { rowViews.append(usageView) }
         rowViews += [primaryAction, more]
         let row = NSStackView(views: rowViews)
@@ -1078,7 +1168,9 @@ final class LaunchRowButton: NSButton {
     ) {
         effectiveAppearance.performAsCurrentDrawingAppearance {
             let solid = reduceTransparency || increaseContrast
-            let fill: NSColor = isSelectedRow ? (solid ? .unemphasizedSelectedContentBackgroundColor : .controlAccentColor.withAlphaComponent(0.14))
+            let fill: NSColor = isDefaultProfile ? .systemGreen.withAlphaComponent(solid ? 0.30 : 0.16)
+                : isAutoSelected ? .systemYellow.withAlphaComponent(solid ? 0.34 : 0.20)
+                : isSelectedRow ? (solid ? .unemphasizedSelectedContentBackgroundColor : .controlAccentColor.withAlphaComponent(0.14))
                 : isHovered && isEnabled ? (solid ? .unemphasizedSelectedContentBackgroundColor : .quaternaryLabelColor.withAlphaComponent(0.08)) : .clear
             layer?.backgroundColor = fill.cgColor
             // Shape identifies keyboard selection even without colour cues.
@@ -1100,6 +1192,7 @@ final class LaunchRowButton: NSButton {
     @objc private func openTarget(_ sender: NSButton) { performClick(nil) }
     @objc private func showInfoTarget(_ sender: NSButton) { onShowInfo?() }
     @objc private func switchTarget(_ sender: NSButton) { onSwitch?() }
+    @objc private func toggleAutoTarget(_ sender: NSButton) { onAutoSelection?() }
     @objc private func showActions(_ sender: NSButton) { onShowActions?(sender) }
 }
 

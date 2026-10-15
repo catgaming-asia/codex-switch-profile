@@ -58,6 +58,29 @@ enum UsageTests {
         expect(unknown.windows[0].resetsAt == nil && UsageState(reading: .available(unknown, checkedAt: now)).detail(at: now).contains("Reset time unavailable"),
             "missing reset times must have an honest description")
         expect(ProfileUsage.unavailable(checkedAt: now).needsRefresh(at: now.addingTimeInterval(60)), "unavailable profiles must be retried")
+        func reading(_ remaining: Int, checkedAt: Date = now, resetsAt: TimeInterval = 2000) -> ProfileUsage {
+            .available(CodexRateLimits(windows: [RateLimitWindow(usedPercent: Double(100 - remaining),
+                windowDurationMins: 300, resetsAt: resetsAt)]), checkedAt: checkedAt)
+        }
+        let policy = AutoSwitchPolicy()
+        let autoUsage = ["default": reading(8), "low": reading(6), "good": reading(70), "best": reading(85)]
+        expect(policy.nextProfile(current: "default", selected: ["default", "low", "good", "best"],
+            thresholds: [:], usage: autoUsage, at: now) == "best", "auto switch must choose the strongest eligible named profile")
+        expect(policy.nextProfile(current: "default", selected: ["low", "good"],
+            thresholds: [:], usage: autoUsage, at: now) == nil, "an unchecked current profile must not switch")
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: ["default": 5], usage: autoUsage, at: now) == nil, "the current threshold must control switching")
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: ["good": 75], usage: autoUsage, at: now) == nil, "a destination below its threshold must be skipped")
+        expect(policy.nextProfile(current: "low", selected: ["low", "default", "good"],
+            thresholds: [:], usage: autoUsage, at: now) == "good", "default must not be reused as a copied credential")
+        var stale = autoUsage
+        stale["good"] = reading(70, checkedAt: now.addingTimeInterval(-121))
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: [:], usage: stale, at: now) == nil, "stale destination readings must not cause a switch")
+        stale["good"] = reading(70, resetsAt: 999)
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: [:], usage: stale, at: now) == nil, "reset destination readings must not cause a switch")
     }
 
     private static func lineFraming() {

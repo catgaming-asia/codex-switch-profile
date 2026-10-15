@@ -45,6 +45,10 @@ final class WorkspaceStore {
     private let defaults: UserDefaults
     private let recentsKey = "workspaceRecents"
     private let pinsKey = "workspacePins"
+    private let activeProfileKey = "activeDefaultProfile"
+    private let autoSwitchKey = "autoSwitchEnabled"
+    private let autoProfilesKey = "autoSwitchProfiles"
+    private let autoThresholdsKey = "autoSwitchThresholds"
     private var refreshTask: Task<Bool, Never>?
     private var refreshRequested = false
     private var hasLoaded = false
@@ -54,6 +58,29 @@ final class WorkspaceStore {
     private var backgroundUsageTask: Task<Void, Never>?
 
     var isRefreshingUsage: Bool { usageTask != nil }
+    var activeProfile: String { defaults.string(forKey: activeProfileKey) ?? "default" }
+    var autoSwitchEnabled: Bool { defaults.bool(forKey: autoSwitchKey) }
+    func isAutoSelected(_ profile: String) -> Bool { (defaults.stringArray(forKey: autoProfilesKey) ?? []).contains(profile) }
+    func autoThreshold(for profile: String) -> Int {
+        min(100, max(0, defaults.dictionary(forKey: autoThresholdsKey)?[profile] as? Int ?? 10))
+    }
+    func setAutoThreshold(_ value: Int, for profile: String) {
+        guard profiles.contains(profile) else { return }
+        var thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
+        thresholds[profile] = min(100, max(0, value))
+        defaults.set(thresholds, forKey: autoThresholdsKey)
+    }
+    func setAutoSwitchEnabled(_ enabled: Bool) {
+        defaults.set(enabled, forKey: autoSwitchKey)
+        notify()
+    }
+    func toggleAutoSelection(_ profile: String) {
+        guard profiles.contains(profile) else { return }
+        var selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? [])
+        if !selected.insert(profile).inserted { selected.remove(profile) }
+        defaults.set(selected.sorted(), forKey: autoProfilesKey)
+        notify()
+    }
     /// Whether periodic usage reads are scheduled, which only low-quota alerts request.
     var isRefreshingUsageInBackground: Bool { backgroundUsageTask != nil }
 
@@ -236,6 +263,7 @@ final class WorkspaceStore {
             let (response, loadedProfiles) = try await (workspaceResponse, profileResponse)
             workspaces = response.bindings
             profiles = loadedProfiles
+            if !profiles.contains(activeProfile) { defaults.set("default", forKey: activeProfileKey) }
             usage = usage.filter { profiles.contains($0.key) }
             guardMode = response.guardMode
             if let selectedProfile, !profiles.contains(selectedProfile) {
@@ -324,8 +352,47 @@ final class WorkspaceStore {
             workspaces.removeAll { $0.profile == profile }
             profiles.removeAll { $0 == profile }
             usage.removeValue(forKey: profile)
+            var selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? [])
+            selected.remove(profile)
+            defaults.set(selected.sorted(), forKey: autoProfilesKey)
+            var thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
+            thresholds.removeValue(forKey: profile)
+            defaults.set(thresholds, forKey: autoThresholdsKey)
+            if activeProfile == profile { defaults.set("default", forKey: activeProfileKey) }
             if selectedProfile == profile { selectedProfile = nil }
             return await refreshAfterMutation("Profile \(profile) removed")
+        } catch {
+            statusMessage = error.localizedDescription
+            onError?(statusMessage)
+            return false
+        }
+    }
+
+    @discardableResult
+    func renameProfile(_ old: String, to new: String) async -> Bool {
+        guard old != "default", profiles.contains(old), !profiles.contains(new),
+              !removingProfiles.contains(old), !isSwitchingDefault, launchingID == nil else { return false }
+        removingProfiles.insert(old)
+        statusMessage = "Renaming \(old)…"
+        notify()
+        defer { removingProfiles.remove(old); notify() }
+        do {
+            try await client.renameProfile(old, to: new)
+            for workspace in workspaces where workspace.profile == old {
+                movePreferences(from: workspace, to: WorkspaceBinding(
+                    path: workspace.path, profile: new,
+                    pathExists: workspace.pathExists, profileExists: workspace.profileExists))
+            }
+            var selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? [])
+            if selected.remove(old) != nil { selected.insert(new) }
+            defaults.set(selected.sorted(), forKey: autoProfilesKey)
+            var thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
+            if let value = thresholds.removeValue(forKey: old) { thresholds[new] = value }
+            defaults.set(thresholds, forKey: autoThresholdsKey)
+            if activeProfile == old { defaults.set(new, forKey: activeProfileKey) }
+            if selectedProfile == old { selectedProfile = new }
+            if let reading = usage.removeValue(forKey: old) { usage[new] = reading }
+            return await refreshAfterMutation("Profile \(old) renamed to \(new)")
         } catch {
             statusMessage = error.localizedDescription
             onError?(statusMessage)
@@ -342,16 +409,36 @@ final class WorkspaceStore {
         notify()
         defer { isSwitchingDefault = false; notify() }
         do {
-            let backup = try await DefaultProfileSwitcher().switchToDefault(from: profile, client: client)
+            let result = try await DefaultProfileSwitcher().switchToDefault(from: profile, client: client)
+            defaults.set(profile, forKey: activeProfileKey)
             _ = await refresh()
             await refreshUsage(force: true)
-            statusMessage = backup.map { "Opened default. Previous auth saved at \($0.path)" } ?? "Opened default with \(profile) authentication"
+            let action = result.restarted ? "Restarted default" : "Switched default without opening Desktop"
+            statusMessage = result.backup.map { "\(action). Previous auth saved at \($0.path)" }
+                ?? "\(action) with \(profile) authentication"
             return true
+        } catch DefaultProfileSwitchError.reopenFailed(let message) {
+            // The credential copy succeeded even though Desktop did not reopen.
+            defaults.set(profile, forKey: activeProfileKey)
+            await refreshUsage(force: true)
+            statusMessage = message
+            onError?(statusMessage)
+            return false
         } catch {
             statusMessage = error.localizedDescription
             onError?(statusMessage)
             return false
         }
+    }
+
+    @discardableResult
+    func autoSwitchIfNeeded(at now: Date = Date()) async -> Bool {
+        guard autoSwitchEnabled, !isSwitchingDefault, launchingID == nil, removingProfiles.isEmpty else { return false }
+        let selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? []).intersection(profiles)
+        let thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
+        guard let target = AutoSwitchPolicy().nextProfile(current: activeProfile, selected: selected,
+            thresholds: thresholds, usage: usage, at: now) else { return false }
+        return await switchToDefault(from: target)
     }
 
     func signInToCLI(_ profile: String) async {

@@ -66,6 +66,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 await self.store.refreshIfNeeded()
                 await self.store.refreshUsage()
+                await self.store.autoSwitchIfNeeded()
                 try? await Task.sleep(for: .seconds(300), tolerance: .seconds(60))
             }
         }
@@ -143,7 +144,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             menuController?.focusMenu()
-            Task { await store.refresh(); await store.refreshUsage() }
+            Task { await store.refresh(); await store.refreshUsage(); await store.autoSwitchIfNeeded() }
             Task { await alerts.refreshPermission() }
         }
     }

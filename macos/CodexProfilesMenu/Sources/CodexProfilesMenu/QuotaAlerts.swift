@@ -1,8 +1,8 @@
 import Foundation
 
 // Low-quota alerts. Everything here is plain Foundation so it can be tested
-// without AppKit or UserNotifications. Alerts only show the numbers; the app
-// never switches profiles or accounts on the person's behalf.
+// without AppKit or UserNotifications. Alerts only show the numbers; the
+// separately enabled auto-switch policy handles credential switching.
 
 /// One profile's quota window at or below the low threshold.
 struct QuotaAlert: Equatable {

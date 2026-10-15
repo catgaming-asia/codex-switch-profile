@@ -174,6 +174,21 @@ struct CLIClient: Sendable {
         }.value
     }
 
+    func renameProfile(_ old: String, to new: String) async throws {
+        guard Self.isValidProfileName(old), Self.isValidProfileName(new),
+              old != "default", new != "default", old != new else { throw CLIClientError.invalidProfileName }
+        let executableURL = try requiredExecutableURL()
+        try await Task.detached(priority: .userInitiated) {
+            let result = try await ProcessRunner().run(
+                executableURL: executableURL,
+                arguments: ["rename", old, new]
+            )
+            guard result.terminationStatus == 0 else {
+                throw CLIClientError.commandFailed(Self.errorMessage(from: result))
+            }
+        }.value
+    }
+
     func signInToCLI(_ profile: String) async throws {
         guard Self.isValidProfileName(profile) else { throw CLIClientError.invalidProfileName }
         let executableURL = try requiredExecutableURL()

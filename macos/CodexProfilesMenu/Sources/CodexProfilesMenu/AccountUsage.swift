@@ -121,6 +121,35 @@ enum ProfileUsage: Equatable, Sendable {
     }
 }
 
+/// Chooses a named credential only from recent, complete quota readings.
+/// The default home is the destination of a switch, so it is never a source
+/// credential to select after another profile has been copied into it.
+struct AutoSwitchPolicy {
+    func nextProfile(current: String, selected: Set<String>, thresholds: [String: Int],
+                     usage: [String: ProfileUsage], at now: Date) -> String? {
+        guard selected.contains(current),
+              let currentLeft = remaining(for: current, usage: usage, at: now),
+              currentLeft <= thresholds[current, default: 10] else { return nil }
+        return selected.filter { $0 != "default" && $0 != current }
+            .compactMap { profile -> (String, Int)? in
+                guard let left = remaining(for: profile, usage: usage, at: now),
+                      left > thresholds[profile, default: 10] else { return nil }
+                return (profile, left)
+            }
+            .sorted { $0.1 != $1.1 ? $0.1 > $1.1 : $0.0 < $1.0 }
+            .first?.0
+    }
+
+    private func remaining(for profile: String, usage: [String: ProfileUsage], at now: Date) -> Int? {
+        guard case let .available(limits, checkedAt) = usage[profile],
+              now.timeIntervalSince(checkedAt) >= 0,
+              now.timeIntervalSince(checkedAt) <= 120,
+              !limits.windows.isEmpty,
+              limits.windows.allSatisfy({ !$0.hasReset(at: now) }) else { return nil }
+        return limits.windows.map(\.remainingPercent).min()
+    }
+}
+
 /// A profile's latest reading and whether a newer one is being read.
 /// Refreshing keeps the previous reading visible instead of blanking it.
 struct UsageState: Equatable {

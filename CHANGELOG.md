@@ -9,6 +9,8 @@ and this project follows semantic versioning for tagged releases.
 
 ### Added
 
+- Account info in the macOS menu now shows the local access token JWT expiry when available, without displaying the token. This timestamp does not indicate when the profile or account expires.
+- Added **Update auth.json…** to named macOS profile menus. It copies a selected credential file into that profile, privately backs up the previous file, and refreshes Codex CLI usage.
 - Added an optional `auth.json` picker to the macOS **Create a profile** dialog. A new named profile can receive the selected credential file without copying any other profile state; the menu then refreshes its Codex usage.
 - Added **Switch** buttons to named profiles in the macOS menu. They ask for confirmation, quit the signed Desktop app when running, privately back up the previous default `auth.json`, copy the selected profile's authentication into default, reopen it only when it was running, and refresh usage. Profile row clicks only select; **Open in ChatGPT** is in the actions menu. The `default` row has no primary action button.
 - Added **Add profile…** beside **Add workspace…** in the macOS menu footer.

@@ -40,6 +40,7 @@ final class WorkspaceStore {
     private(set) var launchingID: LaunchTarget.ID?
     private(set) var isSwitchingDefault = false
     private(set) var removingProfiles: Set<String> = []
+    private(set) var updatingAuthProfiles: Set<String> = []
     private(set) var statusMessage = "Choose a profile or workspace"
 
     private let client: CLIClient
@@ -342,8 +343,33 @@ final class WorkspaceStore {
     }
 
     @discardableResult
+    func updateAuth(_ profile: String, from authFile: URL) async -> Bool {
+        guard profile != "default", profiles.contains(profile), !removingProfiles.contains(profile),
+              !updatingAuthProfiles.contains(profile), !isSwitchingDefault else { return false }
+        updatingAuthProfiles.insert(profile)
+        statusMessage = "Updating auth.json for \(profile)…"
+        notify()
+        defer { updatingAuthProfiles.remove(profile); notify() }
+        do {
+            let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory())
+            let backup = try await Task.detached(priority: .userInitiated) {
+                try ProfileAuthTransfer().replaceSelectedAuth(authFile, in: profile, home: home)
+            }.value
+            await refreshUsage(force: true)
+            statusMessage = backup.map { "Updated \(profile) auth.json. Previous file saved at \($0.path)" }
+                ?? "Updated \(profile) auth.json"
+            return true
+        } catch {
+            statusMessage = "Couldn’t update \(profile) auth.json: \(error.localizedDescription)"
+            onError?(statusMessage)
+            return false
+        }
+    }
+
+    @discardableResult
     func removeProfile(_ profile: String) async -> Bool {
-        guard profile != "default", profiles.contains(profile), !removingProfiles.contains(profile), !isSwitchingDefault else { return false }
+        guard profile != "default", profiles.contains(profile), !removingProfiles.contains(profile),
+              !updatingAuthProfiles.contains(profile), !isSwitchingDefault else { return false }
         removingProfiles.insert(profile)
         statusMessage = "Removing \(profile)…"
         notify()
@@ -373,7 +399,8 @@ final class WorkspaceStore {
     @discardableResult
     func renameProfile(_ old: String, to new: String) async -> Bool {
         guard old != "default", profiles.contains(old), !profiles.contains(new),
-              !removingProfiles.contains(old), !isSwitchingDefault, launchingID == nil else { return false }
+              !removingProfiles.contains(old), !updatingAuthProfiles.contains(old),
+              !isSwitchingDefault, launchingID == nil else { return false }
         removingProfiles.insert(old)
         statusMessage = "Renaming \(old)…"
         notify()
@@ -405,6 +432,7 @@ final class WorkspaceStore {
     @discardableResult
     func switchToDefault(from profile: String) async -> Bool {
         guard profile != "default", profiles.contains(profile), !isSwitchingDefault, removingProfiles.isEmpty,
+              updatingAuthProfiles.isEmpty,
               launchingID == nil else { return false }
         isSwitchingDefault = true
         statusMessage = "Switching \(profile) to default…"
@@ -435,7 +463,8 @@ final class WorkspaceStore {
 
     @discardableResult
     func autoSwitchIfNeeded(at now: Date = Date(), currentExhausted: Bool = false) async -> Bool {
-        guard autoSwitchEnabled, !isSwitchingDefault, launchingID == nil, removingProfiles.isEmpty else { return false }
+        guard autoSwitchEnabled, !isSwitchingDefault, launchingID == nil, removingProfiles.isEmpty,
+              updatingAuthProfiles.isEmpty else { return false }
         let selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? []).intersection(profiles)
         let thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
         guard let target = AutoSwitchPolicy().nextProfile(current: activeProfile, selected: selected,

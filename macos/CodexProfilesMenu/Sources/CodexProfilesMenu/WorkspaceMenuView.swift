@@ -507,6 +507,21 @@ final class WorkspaceMenuViewController: NSViewController {
             refreshing.textColor = .secondaryLabelColor
             stack.addArrangedSubview(refreshing)
         }
+        let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory())
+        let tokenExpiry = ProfileAccessTokenExpiry().read(for: profile, home: home)
+        let expiryDescription: String
+        if let tokenExpiry {
+            let formatter = DateFormatter()
+            formatter.dateStyle = .medium
+            formatter.timeStyle = .short
+            let timestamp = formatter.string(from: tokenExpiry)
+            expiryDescription = tokenExpiry <= now ? "Access token expired \(timestamp)" : "Access token expires \(timestamp)"
+        } else {
+            expiryDescription = "Access token expiry unavailable"
+        }
+        let expiryLabel = label(expiryDescription, size: 12, weight: .medium)
+        expiryLabel.font = .monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        stack.addArrangedSubview(expiryLabel)
         let threshold = store.autoThreshold(for: profile)
         let thresholdLabel = label("Auto switch at \(threshold)% left", size: 12, weight: .medium)
         autoThresholdLabel = thresholdLabel
@@ -519,7 +534,7 @@ final class WorkspaceMenuViewController: NSViewController {
         slider.setAccessibilityLabel("Auto switch threshold for \(visibleProfile(profile))")
         stack.addArrangedSubview(slider)
         slider.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
-        let note = NSTextField(wrappingLabelWithString: "These are Codex CLI limits. The ChatGPT window may use a different account.")
+        let note = NSTextField(wrappingLabelWithString: "Access tokens may refresh automatically. These are Codex CLI limits; the ChatGPT window may use a different account.")
         note.font = .systemFont(ofSize: 11)
         note.textColor = .secondaryLabelColor
         stack.addArrangedSubview(note)
@@ -574,6 +589,12 @@ final class WorkspaceMenuViewController: NSViewController {
         guard let workspace = item.workspace else {
             menu.addItem(menuItem("Add workspace…", #selector(addWorkspaceForProfile(_:)), symbol: "folder.badge.plus", item.profile))
             menu.addItem(menuItem("Sign in to Codex CLI…", #selector(signInToCLI(_:)), symbol: "person.badge.key", item.profile))
+            if item.profile != "default" {
+                let updateAuth = menuItem("Update auth.json…", #selector(updateAuthFile(_:)), symbol: "arrow.triangle.2.circlepath", item.profile)
+                updateAuth.isEnabled = idle && !store.removingProfiles.contains(item.profile)
+                    && !store.updatingAuthProfiles.contains(item.profile)
+                menu.addItem(updateAuth)
+            }
             menu.addItem(.separator())
             let chatGPT = menuItem("Open in ChatGPT", #selector(openFromMenu(_:)), symbol: OpenDestination.chatGPT.symbolName,
                 LaunchRequest(item: item, destination: .chatGPT))
@@ -582,9 +603,11 @@ final class WorkspaceMenuViewController: NSViewController {
             if item.profile != "default" {
                 let rename = menuItem("Rename profile…", #selector(renameProfile(_:)), symbol: "pencil", item.profile)
                 rename.isEnabled = idle && !store.removingProfiles.contains(item.profile)
+                    && !store.updatingAuthProfiles.contains(item.profile)
                 menu.addItem(rename)
                 let remove = menuItem("Remove profile…", #selector(removeProfile(_:)), symbol: "trash", item.profile)
                 remove.isEnabled = idle && !store.removingProfiles.contains(item.profile)
+                    && !store.updatingAuthProfiles.contains(item.profile)
                 menu.addItem(remove)
             }
             return menu
@@ -915,6 +938,26 @@ final class WorkspaceMenuViewController: NSViewController {
     @objc private func signInToCLI(_ sender: NSMenuItem) {
         guard let profile = sender.representedObject as? String else { return }
         Task { await store.signInToCLI(profile) }
+    }
+
+    @objc private func updateAuthFile(_ sender: NSMenuItem) {
+        guard let profile = sender.representedObject as? String, profile != "default" else { return }
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.allowedContentTypes = [.json]
+        panel.prompt = "Update auth.json"
+        panel.message = "Choose an auth.json to copy into this profile. The previous file will be backed up. An open ChatGPT window may need to be reopened to use the new authentication."
+        onRequestClose?()
+        panel.begin { [weak self] response in
+            guard response == .OK, let url = panel.url else { return }
+            guard url.lastPathComponent == "auth.json" else {
+                self?.presentError("Choose a file named auth.json.")
+                return
+            }
+            Task { await self?.store.updateAuth(profile, from: url) }
+        }
     }
 
     private func confirmSwitchToDefault(from profile: String) {

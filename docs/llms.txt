@@ -99,11 +99,13 @@ homes and, on macOS, named ChatGPT windows with separate local state.
   returns 1 without an error message. Unbound noninteractive runs still fail
   without prompting. Explicit mismatches warn by default and can be rejected
   with `workspace guard strict`.
-- Routine commands never copy, print, parse, upload, or compare auth tokens or
+- CLI commands never copy, print, parse, upload, or compare auth tokens or
   ChatGPT cookies. The macOS menu can copy a chosen `auth.json` into a newly
-  created named profile. Its confirmed named profile **Switch** button copies
-  opaque `auth.json` bytes from a named profile into default, retaining the
-  previous default file as a private backup.
+  created named profile or update a named profile with a private backup. Named
+  profile **Switch** and opted-in automatic switching copy opaque `auth.json`
+  bytes into default, retaining the previous default file as a private backup.
+  Account info reads only the local access token JWT `exp` claim to show its
+  expiry; it never prints or uploads credentials.
 - `init <name> --share-with <source>` creates a real private profile directory
   and links only existing `config.toml`, instruction files, `rules/`, and
   `plugins/` entries. Auth, sessions, logs, Desktop data, caches, skills, and
@@ -128,8 +130,9 @@ homes and, on macOS, named ChatGPT windows with separate local state.
 - Desktop account identity follows `auth.json` in the active `CODEX_HOME`, not
   Electron user-data alone. Pointing a named window at a shared home without
   selecting that account's `auth.json` leaves the previous login on screen.
-  Only the explicit macOS create-profile picker and named profile **Switch**
-  action may copy `auth.json`; neither parses or prints its contents. Do not add
+  The macOS create-profile and update pickers, named profile **Switch**, and
+  opted-in automatic switching may copy `auth.json` without parsing or printing
+  its contents. Account info reads only the access token JWT expiry claim. Do not add
   `--shared-home` or automatic credential sharing.
 - Desktop launch refuses an inherited CODEX_ACCESS_TOKEN so a shell access
   token cannot silently override the selected window.
@@ -227,8 +230,9 @@ reset period when a profile crosses into low or critical; it never switches prof
 actions open either destination once, and Open at Login keeps the companion
 in the menu bar. These limits belong to
 the selected profile's Codex CLI sign-in, which may differ from Desktop.
-Desktop and Codex CLI sign-in remain separate. The app does not read tokens
-or cookies. There is no signed download yet; build it from a source checkout.
+Desktop and Codex CLI sign-in remain separate. Account info reads only the
+local access token JWT expiry claim; the app does not read ChatGPT cookies.
+There is no signed download yet; build it from a source checkout.
 
 `make menu-app` builds a universal Apple silicon/Intel app; `make menu-dmg`
 adds an Applications shortcut and SHA-256 checksum. Builds require Swift on

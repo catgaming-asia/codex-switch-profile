@@ -140,7 +140,9 @@ profile confirms before deleting its local data and workspace bindings.
 **Codex left** shows remaining CLI quota. Low readings turn orange or red
 and show their reset time. Hover for details or press **⌘R** to refresh.
 Click a profile's avatar to see its `5h` and weekly quota, reset times and
-last check on a separate Info page. **Back** returns to the profile list.
+last check and local access token expiry on a separate Info page. The token may
+refresh automatically; this timestamp is not the profile's expiry. **Back**
+returns to the profile list.
 
 <p align="center">
   <img src="https://github.com/phuhoang304149/codex-profile/raw/refs/heads/main/docs/images/account-info.png" width="400" alt="Account info page showing a named profile's weekly Codex CLI quota, reset time, last check, and automatic-switch threshold slider.">

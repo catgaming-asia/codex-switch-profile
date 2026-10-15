@@ -22,10 +22,12 @@ Open a profile or workspace in **ChatGPT** to use the original installed ChatGPT
 A named profile opens a window with separate local Desktop state and may
 require sign-in inside that window. `default` uses the stock Desktop session.
 **Sign In to Codex CLI** in the settings menu starts the official CLI login in
-Terminal; it applies only to Codex. The app does not parse or print tokens or
-cookies and does not verify that Desktop and CLI use the same account.
-The optional create-profile picker and named profile **Switch** buttons are explicit
-credential-copy actions. Neither parses or prints the selected file.
+Terminal; it applies only to Codex. Account info reads the local access token
+JWT expiry claim when available, without printing or uploading credentials.
+An access token may refresh automatically; its expiry is not the expiry of the
+profile or account. The app does not verify that Desktop and CLI use the same account.
+The create-profile and update pickers and named profile **Switch** buttons are explicit
+credential-copy actions. They copy files without parsing or printing them.
 
 ChatGPT launching requires the official desktop app. Terminal launching and
 CLI login require the official Codex CLI, either installed separately or
@@ -42,6 +44,8 @@ destination control. Profiles appear first and can open without a folder from
 their actions menus. Clicking a profile row only selects it; named profiles
 have a **Switch** button and `default` has no primary action button. Clicking
 an avatar opens an Info page for that profile; **Back** returns to the list.
+Account info shows the access token expiry from that profile's local `auth.json`,
+or **Unavailable** if there is no readable JWT expiry claim.
 Pinned projects follow; other projects follow their last successful launch.
 Workspace rows show the project name, profile and folder,
 with an explicit **Open** button and an actions menu. Missing folders and
@@ -53,7 +57,10 @@ open, so it never launches the previous profile.
 Every row's actions menu offers **Open in ChatGPT** and **Open in Terminal**,
 which use that destination once without changing the default. Profile rows
 also offer **Add workspace…** for that profile and **Sign in to Codex CLI…**.
-Named profile rows additionally offer **Rename profile…** and **Remove profile…**. Rename moves the
+Named profile rows additionally offer **Update auth.json…**, **Rename profile…** and **Remove profile…**.
+Updating authentication copies a selected `auth.json` into that profile, keeps the previous file as a
+private backup in its profile home, and refreshes Codex CLI usage. An open ChatGPT window may need to be
+reopened to use the new authentication. Rename moves the
 profile home, workspace bindings, and managed launcher after its window is closed. Their **Switch** button
 asks for confirmation, closes all running instances of
 the signed Desktop app, saves the previous default `auth.json` as a private

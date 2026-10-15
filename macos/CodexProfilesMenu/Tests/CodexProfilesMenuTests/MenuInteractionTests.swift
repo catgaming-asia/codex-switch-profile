@@ -124,6 +124,7 @@ struct MenuInteractionTests {
         let infoLabels = descendants(controller.view).compactMap { $0 as? NSTextField }.map(\.stringValue)
         expect(infoLabels.contains("Account info") && infoLabels.contains("Profile work")
             && infoLabels.contains("5h  ·  77% remaining") && infoLabels.contains("W (7d)  ·  9% remaining")
+            && infoLabels.contains { $0.hasPrefix("Access token exp") }
             && infoLabels.contains { $0.hasPrefix("Checked ") }
             && !FileManager.default.fileExists(atPath: marker.path),
             "avatar must open account info with quota and last check without launching")
@@ -287,13 +288,13 @@ struct MenuInteractionTests {
         expect(choices.items.first { $0.title == "work" }?.isEnabled == false && choices.items.first { $0.title == "personal" }?.isEnabled == true,
             "only another profile may be chosen")
         let profileMenu = controller.actionsMenu(for: .profile("work"))
-        expect(["Open in ChatGPT", "Open in Terminal", "Add workspace…", "Sign in to Codex CLI…", "Remove profile…"].allSatisfy { item($0, in: profileMenu).isEnabled },
-            "profile actions must offer launches, removal and CLI sign-in")
+        expect(["Open in ChatGPT", "Open in Terminal", "Add workspace…", "Sign in to Codex CLI…", "Update auth.json…", "Remove profile…"].allSatisfy { item($0, in: profileMenu).isEnabled },
+            "profile actions must offer launches, authentication updates, removal and CLI sign-in")
         expect(profileMenu.items.allSatisfy { $0.title != "Switch to default…" },
             "Switch to default must move from the menu to the profile row")
         let defaultMenu = controller.actionsMenu(for: .profile("default"))
-        expect(defaultMenu.items.allSatisfy { $0.title != "Switch to default…" && $0.title != "Remove profile…" },
-            "the stock default profile must not offer switching or removal")
+        expect(defaultMenu.items.allSatisfy { $0.title != "Switch to default…" && $0.title != "Remove profile…" && $0.title != "Update auth.json…" },
+            "the stock default profile must not offer switching, authentication updates or removal")
         store.loadPreview([], profiles: ["default", "work"])
         let defaultRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("default") }!
         expect(!descendants(defaultRow).compactMap { $0 as? NSButton }.contains { $0.title == "Switch" || $0.title == "Open" },

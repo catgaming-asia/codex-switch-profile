@@ -90,7 +90,7 @@ swiftc \
   "$APP_SOURCE_DIR"/*.swift \
   "$APP_PROJECT_DIR/Tests/CodexProfilesMenuTests/MenuInteractionTests.swift" \
   -o "$TMP_DIR/MenuInteractionTests"
-"$TMP_DIR/MenuInteractionTests" "${TEST_LOCALE[@]}"
+HOME="$TMP_DIR/home" "$TMP_DIR/MenuInteractionTests" "${TEST_LOCALE[@]}"
 
 swiftc \
   -module-cache-path "$TMP_DIR/module-cache" \

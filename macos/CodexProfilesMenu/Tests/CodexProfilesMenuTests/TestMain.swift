@@ -186,14 +186,50 @@ struct CodexProfilesMenuTests {
             "auth selection unexpectedly cloned default configuration")
         let installedMode = try FileManager.default.attributesOfItem(atPath: installedAuth.path)[.posixPermissions] as? NSNumber
         expect(installedMode?.intValue == 0o600, "new profile authentication must be private")
+        try Data("updated-token".utf8).write(to: selectedAuth)
+        let updatedBackup = try ProfileAuthTransfer().replaceSelectedAuth(selectedAuth, in: "with-auth", home: URL(fileURLWithPath: home))
+        expect(try String(contentsOf: installedAuth) == "updated-token", "profile authentication was not updated")
+        expect(try String(contentsOf: updatedBackup!) == "selected-token", "previous profile authentication was not preserved")
+        let updatedMode = try FileManager.default.attributesOfItem(atPath: installedAuth.path)[.posixPermissions] as? NSNumber
+        let updatedBackupMode = try FileManager.default.attributesOfItem(atPath: updatedBackup!.path)[.posixPermissions] as? NSNumber
+        expect(updatedMode?.intValue == 0o600 && updatedBackupMode?.intValue == 0o600,
+            "updated authentication and its backup must be private")
+        do {
+            _ = try ProfileAuthTransfer().replaceSelectedAuth(installedAuth, in: "with-auth", home: URL(fileURLWithPath: home))
+            expect(false, "a profile could replace its authentication with itself")
+        } catch DefaultProfileSwitchError.unsafePath {} catch { expect(false, "self replacement returned the wrong error") }
         expect(!(await store.createProfile("with-auth", authFile: selectedAuth)), "selected authentication overwrote an existing profile")
-        expect(try String(contentsOf: installedAuth) == "selected-token", "existing profile authentication changed")
+        expect(try String(contentsOf: installedAuth) == "updated-token", "existing profile authentication changed")
         try FileManager.default.removeItem(at: selectedAuth)
         try FileManager.default.createSymbolicLink(at: selectedAuth, withDestinationURL: installedAuth)
         expect(!(await store.createProfile("unsafe-auth", authFile: selectedAuth)), "symlinked selected authentication was accepted")
+        do {
+            _ = try ProfileAuthTransfer().replaceSelectedAuth(selectedAuth, in: "with-auth", home: URL(fileURLWithPath: home))
+            expect(false, "symlinked selected authentication was accepted for update")
+        } catch DefaultProfileSwitchError.unsafePath {} catch { expect(false, "unsafe update returned the wrong error") }
         expect(!FileManager.default.fileExists(atPath: URL(fileURLWithPath: home).appendingPathComponent(".codex-unsafe-auth").path),
             "invalid selected authentication left an empty profile")
         try FileManager.default.removeItem(at: selectedAuth)
+        let expiryHome = URL(fileURLWithPath: home).appendingPathComponent(".codex-expiry")
+        try FileManager.default.createDirectory(at: expiryHome, withIntermediateDirectories: true)
+        let expiryAuth = expiryHome.appendingPathComponent("auth.json")
+        let expiry = TimeInterval(1_893_456_000)
+        let payload = Data("{\"exp\":1893456000}".utf8).base64EncodedString()
+        try Data("{\"tokens\":{\"access_token\":\"header.\(payload).signature\"}}".utf8).write(to: expiryAuth)
+        let expiryReader = ProfileAccessTokenExpiry()
+        expect(expiryReader.read(for: "expiry", home: URL(fileURLWithPath: home))?.timeIntervalSince1970 == expiry,
+            "named profile access token expiry was not decoded")
+        let defaultAuthForExpiry = URL(fileURLWithPath: home).appendingPathComponent(".codex/auth.json")
+        try Data("{\"tokens\":{\"access_token\":\"header.\(payload).signature\"}}".utf8).write(to: defaultAuthForExpiry)
+        expect(expiryReader.read(for: "default", home: URL(fileURLWithPath: home))?.timeIntervalSince1970 == expiry,
+            "default access token expiry was not decoded")
+        try Data("{\"tokens\":{\"access_token\":\"not-a-jwt\"}}".utf8).write(to: expiryAuth)
+        expect(expiryReader.read(for: "expiry", home: URL(fileURLWithPath: home)) == nil,
+            "a non-JWT credential must have unavailable expiry")
+        try FileManager.default.removeItem(at: expiryAuth)
+        try FileManager.default.createSymbolicLink(at: expiryAuth, withDestinationURL: defaultAuthForExpiry)
+        expect(expiryReader.read(for: "expiry", home: URL(fileURLWithPath: home)) == nil,
+            "symlinked authentication must not be read for expiry")
         let sourceAuth = profileHome.appendingPathComponent("auth.json")
         let defaultAuth = URL(fileURLWithPath: home).appendingPathComponent(".codex/auth.json")
         try Data("named-token".utf8).write(to: sourceAuth)

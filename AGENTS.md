@@ -142,10 +142,11 @@ link.
 ## Safety boundaries (state these accurately)
 
 - CLI-oriented commands select `CODEX_HOME`; named Desktop launches also select
-  per-profile Electron user data. The macOS create-profile picker, confirmed
-  named profile **Switch** button, and opted-in automatic switch copy opaque
-  `auth.json` bytes; no command parses,
-  prints, compares, or uploads tokens or ChatGPT cookies.
+  per-profile Electron user data. The macOS create-profile and update pickers,
+  confirmed named profile **Switch** button, and opted-in automatic switch copy opaque
+  `auth.json` bytes. The macOS Account info page reads only the local access
+  token JWT `exp` claim to show its expiry; it never prints, compares, or uploads
+  tokens or ChatGPT cookies. CLI commands do not parse them.
 - `clone-config` copies only an allowlist of non-secret root config files and
   refuses sensitive-looking key names.
 - `init --share-with` links only the documented configuration allowlist. It

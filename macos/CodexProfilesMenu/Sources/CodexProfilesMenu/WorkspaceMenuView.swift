@@ -544,6 +544,7 @@ final class WorkspaceMenuViewController: NSViewController {
         let value = sender.integerValue
         store.setAutoThreshold(value, for: infoProfile)
         autoThresholdLabel?.stringValue = "Auto switch at \(value)% left"
+        Task { await store.autoSwitchIfNeeded() }
     }
 
     @objc private func toggleAutoSwitch(_ sender: NSButton) {

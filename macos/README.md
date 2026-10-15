@@ -68,7 +68,11 @@ profile's checkbox controls whether it participates. The avatar's Info panel
 has a per-profile slider for the remaining-quota threshold (10% by default).
 When the active profile reaches its threshold, the app chooses the checked
 named profile with the most quota remaining above its own threshold. It uses
-fresh Codex CLI readings and leaves Desktop closed if it was closed. The
+fresh Codex CLI readings and leaves Desktop closed if it was closed. A new
+quota event written to the current profile's local session log triggers an
+immediate check and switch when eligible; the five-minute quota check remains
+the fallback when sessions produce no event. The monitor reads only appended
+rate-limit events and never reads authentication files. The
 current profile marker records switches made by this menu; it does not verify
 the account inside Desktop or track changes made elsewhere.
 Actions that cannot apply, such as revealing a missing folder, are disabled.

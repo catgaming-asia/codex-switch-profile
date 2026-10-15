@@ -42,6 +42,7 @@ swiftc \
   "$APP_SOURCE_DIR/CLIClient.swift" \
   "$APP_SOURCE_DIR/DefaultProfileSwitcher.swift" \
   "$APP_SOURCE_DIR/AccountUsage.swift" \
+  "$APP_SOURCE_DIR/SessionQuotaMonitor.swift" \
   "$APP_SOURCE_DIR/WorkspaceStore.swift" \
   "$APP_SOURCE_DIR/QuotaAlerts.swift" \
   "$TEST_SOURCE" \

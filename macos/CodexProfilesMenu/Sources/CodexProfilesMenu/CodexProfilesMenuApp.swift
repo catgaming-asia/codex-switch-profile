@@ -23,6 +23,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuController: WorkspaceMenuViewController?
     private var eventMonitor: Any?
     private var statusRefreshTask: Task<Void, Never>?
+    private let sessionQuotaMonitor = SessionQuotaMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = WorkspaceMenuViewController(store: store, alerts: alerts)
@@ -57,6 +58,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         store.onStatusUsageChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
+            self.updateSessionMonitor()
+            Task { await self.store.autoSwitchIfNeeded() }
+        }
+        store.onAutoSwitchSettingChange = { [weak self] in self?.updateSessionMonitor() }
+        sessionQuotaMonitor.onSignal = { [weak self] profile, signal in
+            guard let self else { return }
+            let current = self.store.activeProfile
+            guard self.store.autoSwitchEnabled, !self.store.isSwitchingDefault,
+                  self.store.isAutoSelected(current),
+                  profile == "default" || profile == current,
+                  signal.meetsThreshold(self.store.autoThreshold(for: current)) else { return }
+            Task {
+                await self.store.refreshUsage(force: true)
+                guard self.store.activeProfile == current else { return }
+                await self.store.autoSwitchIfNeeded(currentExhausted: signal.exhausted && profile == current)
+            }
         }
         notifier.onOpen = { [weak self] in self?.showMenu() }
         // Alerts keep their own notification schedule; the status text also refreshes while the app runs.
@@ -65,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             while !Task.isCancelled {
                 guard let self else { return }
                 await self.store.refreshIfNeeded()
+                self.updateSessionMonitor()
                 await self.store.refreshUsage()
                 await self.store.autoSwitchIfNeeded()
                 try? await Task.sleep(for: .seconds(300), tolerance: .seconds(60))
@@ -88,6 +106,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func showMenu() {
         if !popover.isShown { togglePopover() }
+    }
+
+    private func updateSessionMonitor() {
+        if store.autoSwitchEnabled {
+            sessionQuotaMonitor.update(profiles: [store.activeProfile])
+        } else {
+            sessionQuotaMonitor.stop()
+        }
     }
 
     /// The icon is a template image either way; a low quota adds a badge shape,
@@ -124,6 +150,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         statusRefreshTask?.cancel()
+        sessionQuotaMonitor.stop()
         store.cancelUsageRefresh()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         if let eventMonitor {
@@ -144,7 +171,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
             menuController?.focusMenu()
-            Task { await store.refresh(); await store.refreshUsage(); await store.autoSwitchIfNeeded() }
+            Task {
+                await store.refresh()
+                updateSessionMonitor()
+                await store.refreshUsage()
+                await store.autoSwitchIfNeeded()
+            }
             Task { await alerts.refreshPermission() }
         }
     }

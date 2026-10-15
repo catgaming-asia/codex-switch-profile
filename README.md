@@ -130,7 +130,9 @@ profile last switched into default hides its **Switch** button. Checkboxes on
 profile rows select participants for the optional **Auto** switch control beside
 **Add profile…**; the avatar's Info panel sets each profile's quota threshold.
 `default` is green and selected profiles are yellow. Automatic switching uses
-fresh Codex CLI quota readings; the active-profile marker reflects switches
+fresh Codex CLI quota readings and reacts to a low-quota signal written by an
+active CLI or Desktop session when available. The regular check remains every
+five minutes. The active-profile marker reflects switches
 made through this menu rather than a verified Desktop account. Removing a
 profile confirms before deleting its local data and workspace bindings.
 

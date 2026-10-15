@@ -30,6 +30,9 @@ enum UsageTests {
         let unknown = try CodexRateLimits.decode(Data(#"{"rateLimits":{"primary":{"usedPercent":12.4,"windowDurationMins":null,"resetsAt":null}}}"#.utf8))
         expect(unknown.windows[0].durationLabel == nil && unknown.windows[0].remainingPercent == 87,
             "missing durations must not become a guessed 5h window or overstate remaining quota")
+        let exhaustedSnapshot = try CodexRateLimits.decode(Data(#"{"rateLimits":{"primary":null,"secondary":null,"rateLimitReachedType":"rate_limit_reached"}}"#.utf8))
+        expect(exhaustedSnapshot.exhausted && exhaustedSnapshot.windows.isEmpty,
+            "an explicit server exhaustion must remain actionable without window percentages")
         for json in [#"{"rateLimits":{"primary":null,"secondary":null}}"#,
                      #"{"rateLimits":{"primary":{"windowDurationMins":300}}}"#,
                      #"{"rateLimits":{"limitId":"code_reviews","primary":{"usedPercent":1}}}"#] {
@@ -81,6 +84,28 @@ enum UsageTests {
         stale["good"] = reading(70, resetsAt: 999)
         expect(policy.nextProfile(current: "default", selected: ["default", "good"],
             thresholds: [:], usage: stale, at: now) == nil, "reset destination readings must not cause a switch")
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: ["default": 0], usage: autoUsage, at: now, currentExhausted: true) == "good",
+            "an explicit quota-exhausted signal must bypass a stale current percentage")
+        var serverExhausted = autoUsage
+        serverExhausted["default"] = .available(CodexRateLimits(windows: [], exhausted: true), checkedAt: now)
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: [:], usage: serverExhausted, at: now) == "good",
+            "a fresh server-reported exhaustion must switch even without a percentage")
+        serverExhausted["good"] = .available(CodexRateLimits(windows: [
+            RateLimitWindow(usedPercent: 20, windowDurationMins: 300, resetsAt: 2000)], exhausted: true), checkedAt: now)
+        expect(policy.nextProfile(current: "default", selected: ["default", "good"],
+            thresholds: [:], usage: serverExhausted, at: now) == nil,
+            "a destination reporting exhaustion must be skipped despite apparent percentage headroom")
+        let limited = Data(#"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":96},"secondary":{"used_percent":78},"rate_limit_reached_type":null}}}"#.utf8)
+        let signal = SessionQuotaSignal(line: limited)
+        expect(signal?.remainingPercent == 4 && signal?.meetsThreshold(5) == true
+            && signal?.meetsThreshold(3) == false, "session signals must use the lowest quota window")
+        let exhausted = Data(#"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":null,"secondary":null,"rate_limit_reached_type":"rate_limit_reached"}}}"#.utf8)
+        expect(SessionQuotaSignal(line: exhausted)?.exhausted == true,
+            "an explicit limit signal must work without window percentages")
+        let unrelated = Data(#"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"code_reviews","primary":{"used_percent":100}}}}"#.utf8)
+        expect(SessionQuotaSignal(line: unrelated) == nil, "other limit buckets must not switch Codex profiles")
     }
 
     private static func lineFraming() {

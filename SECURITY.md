@@ -54,6 +54,12 @@ created named profile. The file must be regular, nonempty, and named exactly
 `auth.json`; the copy has mode `600`. Existing profile authentication is not
 overwritten by this creation flow. Codex quota is refreshed afterward, while
 the separate ChatGPT window may still require sign-in.
+When automatic switching is enabled, the menu also watches local Codex
+session JSONL writes for structured `rate_limits` events. It reads appended
+lines from the current profile and default sessions, uses only quota values
+and an explicit exhaustion flag, and does not retain session text or read
+authentication files. This local signal can shorten the response time; a
+five-minute quota read remains the fallback when no session event arrives.
 
 ## What the project does not verify
 

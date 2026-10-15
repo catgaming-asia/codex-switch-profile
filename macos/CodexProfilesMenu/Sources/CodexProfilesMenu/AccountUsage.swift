@@ -86,12 +86,20 @@ enum UsageFormat {
 
 struct CodexRateLimits: Equatable, Sendable {
     let windows: [RateLimitWindow]
+    let exhausted: Bool
+
+    init(windows: [RateLimitWindow], exhausted: Bool = false) {
+        self.windows = windows
+        self.exhausted = exhausted
+    }
 
     static func decode(_ data: Data) throws -> Self {
         struct Snapshot: Decodable {
             let primary: RateLimitWindow?
             let secondary: RateLimitWindow?
             let limitId: String?
+            let rateLimitReachedType: String?
+            let spendControlReached: Bool?
         }
         struct Response: Decodable {
             let rateLimits: Snapshot
@@ -103,8 +111,9 @@ struct CodexRateLimits: Equatable, Sendable {
             throw UsageReadError.unavailable
         }
         let windows = [snapshot.primary, snapshot.secondary].compactMap { $0 }
-        guard !windows.isEmpty else { throw UsageReadError.unavailable }
-        return Self(windows: windows)
+        let exhausted = snapshot.rateLimitReachedType != nil || snapshot.spendControlReached == true
+        guard !windows.isEmpty || exhausted else { throw UsageReadError.unavailable }
+        return Self(windows: windows, exhausted: exhausted)
     }
 }
 
@@ -126,10 +135,17 @@ enum ProfileUsage: Equatable, Sendable {
 /// credential to select after another profile has been copied into it.
 struct AutoSwitchPolicy {
     func nextProfile(current: String, selected: Set<String>, thresholds: [String: Int],
-                     usage: [String: ProfileUsage], at now: Date) -> String? {
-        guard selected.contains(current),
-              let currentLeft = remaining(for: current, usage: usage, at: now),
-              currentLeft <= thresholds[current, default: 10] else { return nil }
+                     usage: [String: ProfileUsage], at now: Date,
+                     currentExhausted: Bool = false) -> String? {
+        guard selected.contains(current) else { return nil }
+        if !currentExhausted {
+            guard case let .available(limits, checkedAt) = usage[current],
+                  now.timeIntervalSince(checkedAt) >= 0,
+                  now.timeIntervalSince(checkedAt) <= 120,
+                  limits.windows.allSatisfy({ !$0.hasReset(at: now) }),
+                  limits.exhausted || (remaining(for: current, usage: usage, at: now)
+                    .map { $0 <= thresholds[current, default: 10] } ?? false) else { return nil }
+        }
         return selected.filter { $0 != "default" && $0 != current }
             .compactMap { profile -> (String, Int)? in
                 guard let left = remaining(for: profile, usage: usage, at: now),
@@ -142,6 +158,7 @@ struct AutoSwitchPolicy {
 
     private func remaining(for profile: String, usage: [String: ProfileUsage], at now: Date) -> Int? {
         guard case let .available(limits, checkedAt) = usage[profile],
+              !limits.exhausted,
               now.timeIntervalSince(checkedAt) >= 0,
               now.timeIntervalSince(checkedAt) <= 120,
               !limits.windows.isEmpty,

@@ -14,6 +14,7 @@ final class WorkspaceStore {
     /// Called when a usage reading changes, whether or not the menu is open.
     var onUsageChange: (() -> Void)?
     var onStatusUsageChange: (() -> Void)?
+    var onAutoSwitchSettingChange: (() -> Void)?
 
     var query = "" {
         didSet { notify() }
@@ -72,6 +73,7 @@ final class WorkspaceStore {
     }
     func setAutoSwitchEnabled(_ enabled: Bool) {
         defaults.set(enabled, forKey: autoSwitchKey)
+        onAutoSwitchSettingChange?()
         notify()
     }
     func toggleAutoSelection(_ profile: String) {
@@ -432,12 +434,12 @@ final class WorkspaceStore {
     }
 
     @discardableResult
-    func autoSwitchIfNeeded(at now: Date = Date()) async -> Bool {
+    func autoSwitchIfNeeded(at now: Date = Date(), currentExhausted: Bool = false) async -> Bool {
         guard autoSwitchEnabled, !isSwitchingDefault, launchingID == nil, removingProfiles.isEmpty else { return false }
         let selected = Set(defaults.stringArray(forKey: autoProfilesKey) ?? []).intersection(profiles)
         let thresholds = defaults.dictionary(forKey: autoThresholdsKey) as? [String: Int] ?? [:]
         guard let target = AutoSwitchPolicy().nextProfile(current: activeProfile, selected: selected,
-            thresholds: thresholds, usage: usage, at: now) else { return false }
+            thresholds: thresholds, usage: usage, at: now, currentExhausted: currentExhausted) else { return false }
         return await switchToDefault(from: target)
     }
 

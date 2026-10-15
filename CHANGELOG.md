@@ -22,6 +22,7 @@ and this project follows semantic versioning for tagged releases.
 
 - **Switch** now restarts Desktop only when it was already running; switching while Desktop is closed leaves it closed.
 - Added an opt-in automatic profile switch using fresh Codex CLI quota, per-profile participation checkboxes and thresholds in Info, plus active/selected row cues.
+- Automatic switching now reacts to appended Codex CLI and Desktop session quota events, including explicit exhaustion, while retaining the five-minute periodic check. A fresh quota reading also evaluates the switch immediately.
 - Removed the macOS menu Search field and Command-K shortcut; the profile filter remains.
 
 - Made the macOS menu-bar app the README's main entry point, with native

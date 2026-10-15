@@ -442,6 +442,28 @@ struct MenuInteractionTests {
                 && alpha(icons[2], at: gap, scale: scale) > 0.9 && alpha(icons[2], at: beside, scale: scale) > 0.9,
                 "a critical quota must cut a bar and a separate dot into the badge at \(scale)x")
         }
+        let signalHome = root.appendingPathComponent("signal-home")
+        let sessionDirectory = signalHome.appendingPathComponent(".codex/sessions/2026/10/15")
+        try FileManager.default.createDirectory(at: sessionDirectory, withIntermediateDirectories: true)
+        let sessionFile = sessionDirectory.appendingPathComponent("rollout.jsonl")
+        try Data("{}\n".utf8).write(to: sessionFile)
+        let sessionMonitor = SessionQuotaMonitor()
+        var observedSignal: SessionQuotaSignal?
+        sessionMonitor.onSignal = { profile, signal in
+            if profile == "default" { observedSignal = signal }
+        }
+        sessionMonitor.update(profiles: ["default"], home: signalHome)
+        let sessionHandle = try FileHandle(forWritingTo: sessionFile)
+        try sessionHandle.seekToEnd()
+        try sessionHandle.write(contentsOf: Data(#"{"type":"event_msg","payload":{"type":"token_count","rate_limits":{"limit_id":"codex","primary":{"used_percent":96},"secondary":{"used_percent":78}}}}"#.utf8))
+        try sessionHandle.write(contentsOf: Data("\n".utf8))
+        try sessionHandle.close()
+        for _ in 0..<40 where observedSignal == nil {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        expect(observedSignal?.remainingPercent == 4,
+            "the session listener must deliver quota changes from an active session without a network poll")
+        sessionMonitor.stop()
         print("Native menu interaction tests passed.")
     }
 

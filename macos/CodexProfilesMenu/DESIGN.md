@@ -99,6 +99,11 @@ Each reader runs in a private unbound directory, drops inherited credential
 override variables and has a ten-second deadline with owned-process cleanup.
 Quit waits for cancelled readers to exit. No inference or account-login RPCs
 are sent and no quota snapshots are persisted.
+An FSEvents monitor also watches appended session JSONL lines in the default
+and current named homes. It extracts only structured Codex `rate_limits`
+events, then uses the bounded reader to confirm destination headroom before
+an automatic switch. The five-minute reader remains the fallback when a CLI
+or Desktop session emits no local event.
 
 The app uses NSStatusItem, a transient NSPopover and accessory activation.
 Open at Login uses `SMAppService.mainApp`; a login launch stays in the menu

@@ -7,8 +7,13 @@ Swift nor a separate `codex-profile` installation on the user's Mac.
 Drag **Codex Profiles.app** to **Applications**, open it, and choose
 **Open** beside an existing profile. If none exists, choose **Create profile…**
 and enter a name such as `work` or `personal`. A project folder is not required.
+You may optionally choose an existing `auth.json` in the creation dialog. The
+app creates the normal separate named profile, copies that file into it with
+private permissions, and refreshes Codex quota. Without a selected file, it
+creates the profile as before. The file must be named `auth.json`; existing
+profiles are never overwritten by this action.
 The app opens its menu when you launch it. **New profile…** is also in its gear
-menu. **Add workspace…** optionally binds a project folder to a profile for a
+menu. **Add profile…** sits beside **Add workspace…** in the footer. **Add workspace…** optionally binds a project folder to a profile for a
 shortcut. **Open at Login** in the gear menu starts the app quietly in the menu
 bar when you log in; macOS may ask you to allow it in Login Items. Opening the
 app again from Finder or Spotlight shows the menu.
@@ -17,8 +22,10 @@ Open a profile or workspace in **ChatGPT** to use the original installed ChatGPT
 A named profile opens a window with separate local Desktop state and may
 require sign-in inside that window. `default` uses the stock Desktop session.
 **Sign In to Codex CLI** in the settings menu starts the official CLI login in
-Terminal; it applies only to Codex. The app never reads tokens or cookies and
-does not verify that Desktop and CLI use the same account.
+Terminal; it applies only to Codex. The app does not parse or print tokens or
+cookies and does not verify that Desktop and CLI use the same account.
+The optional create-profile picker and named profile **Switch** buttons are explicit
+credential-copy actions. Neither parses or prints the selected file.
 
 ChatGPT launching requires the official desktop app. Terminal launching and
 CLI login require the official Codex CLI, either installed separately or
@@ -30,8 +37,11 @@ a server-side account boundary.
 
 ## Menu and keyboard
 
-The menu uses system search, a profile filter and a ChatGPT/Terminal
-destination control. Profiles appear first and can open without a folder.
+The menu uses a profile filter and a ChatGPT/Terminal
+destination control. Profiles appear first and can open without a folder from
+their actions menus. Clicking a profile row only selects it; named profiles
+have a **Switch** button and `default` has no primary action button. Clicking
+an avatar opens an Info page for that profile; **Back** returns to the list.
 Pinned projects follow; other projects follow their last successful launch.
 Workspace rows show the project name, profile and folder,
 with an explicit **Open** button and an actions menu. Missing folders and
@@ -43,12 +53,18 @@ open, so it never launches the previous profile.
 Every row's actions menu offers **Open in ChatGPT** and **Open in Terminal**,
 which use that destination once without changing the default. Profile rows
 also offer **Add workspace…** for that profile and **Sign in to Codex CLI…**.
+Named profile rows additionally offer **Remove profile…**. Their **Switch** button
+asks for confirmation, closes all running instances of
+the signed Desktop app, saves the previous default `auth.json` as a private
+backup in `~/.codex`, copies the selected credential, reopens default and
+refreshes usage. Removal asks for confirmation, then permanently deletes the
+named profile home and its workspace bindings. `default` cannot be removed
+from this menu.
 Actions that cannot apply, such as revealing a missing folder, are disabled.
 
-Search receives focus when the menu opens. ↑/↓ selects available profiles or
-projects; Return opens the selection, or the first available search result.
-⌘1–9 opens the corresponding visible row, ⌘K focuses search, and ⌘R refreshes.
-Escape clears search before closing. Successful launches close the popover.
+↑/↓ selects available profiles or projects; Return opens the selection.
+⌘1–9 opens the corresponding visible row, and ⌘R refreshes.
+Escape returns from Info or closes the menu. Successful launches close the popover.
 
 Profile-only launches start in the home directory. Adding a project shortcut
 is a separate action; creating a profile never opens a folder picker unless
@@ -64,7 +80,10 @@ number turn red; the number always carries the value. A low window also
 replaces the row's description with its reset time, such as
 `5h limit low · resets in 1h 12m`. Hover a reading for each reset time and
 when it was checked. Missing limits show **Unavailable**; expired readings
-show a dash until refreshed. Neither state disables **Open**.
+show a dash until refreshed. Neither state disables profile actions.
+The avatar opens a separate Info page with the profile name, each reported
+quota percentage, reset time and last check. It shows Codex CLI usage only;
+it cannot establish the account signed into the ChatGPT window.
 
 Usage belongs to each profile's **Codex CLI** sign-in. Desktop sign-in can
 use a different account; the companion does not compare accounts. Sign in
@@ -80,8 +99,10 @@ It does not read credential files or send inference requests. Credential
 override variables are removed from this query so they cannot substitute an
 inherited account for the profile's sign-in.
 
-Reads happen in the background when the menu opens, and about every five
-minutes while **Low-quota alerts** is on. They are cached in
+Reads happen when the menu opens and about every five minutes while the menu-bar
+app runs, so `default`'s `5h` and weekly (`W`) remaining percentages stay visible
+beside the icon. The bar shows only the icon until a reading is available.
+Readings are cached in
 memory for 60 seconds, refreshed after a reported reset or with ⌘R, and
 limited to two concurrent readers with a ten-second deadline per reader.
 During a refresh the previous reading stays visible, dimmed, and each row
@@ -92,6 +113,11 @@ usage errors do not interrupt profile launches or open error dialogs.
 
 ## Low-quota alerts
 
+Use **Hide profile names** in the gear menu to mask visible names in profile
+rows, the profile filter, and menus for screenshots. Choose **Show profile
+names** to restore them. The choice persists across launches and does not
+change profile data or routing.
+
 The menu-bar icon marks low quota on its own. When an initialized profile's
 tightest Codex window is at 25% or less, the icon gains a badge dot; at 10%
 or less the badge carries an exclamation mark. The icon stays a monochrome
@@ -101,7 +127,8 @@ VoiceOver label name each profile and window, for example
 reset time passes. Quota in a window only falls until it resets, so a reading
 stays an upper bound on what is left: the badge never overstates the remaining
 quota, but a profile can run lower than it shows until the next reading. The
-icon needs no permission and starts no reads of its own.
+icon needs no permission. When names are hidden, its tooltip and VoiceOver
+label omit profile names.
 
 **Low-quota alerts** in the gear menu adds macOS notifications. It is off by
 default, and macOS asks for notification permission only when you turn it on.
@@ -124,9 +151,9 @@ profile has at least 50% of the same window left in a reading under 15
 minutes old, it also says so, for example `personal has 70% left.` Clicking
 the notification opens the menu.
 
-While alerts are on, the app checks usage about every five minutes through
-the same reader, cache, two-reader limit, deadlines and process cleanup.
-Checks stop when alerts are turned off or the app quits, and no reader starts
+The menu-bar percentages check usage about every five minutes through the
+same reader, cache, two-reader limit, deadlines and process cleanup. Alerts
+use those readings when enabled. Checks stop when the app quits, and no reader starts
 when no profile is initialized. A login launch lists profiles once; profiles
 created outside the app join the checks the next time the menu opens.
 

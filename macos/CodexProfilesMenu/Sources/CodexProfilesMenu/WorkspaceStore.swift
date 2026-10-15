@@ -13,6 +13,7 @@ final class WorkspaceStore {
     var onError: ((String) -> Void)?
     /// Called when a usage reading changes, whether or not the menu is open.
     var onUsageChange: (() -> Void)?
+    var onStatusUsageChange: (() -> Void)?
 
     var query = "" {
         didSet { notify() }
@@ -26,7 +27,7 @@ final class WorkspaceStore {
     private(set) var workspaces: [WorkspaceBinding] = []
     private(set) var profiles: [String] = []
     private(set) var usage: [String: ProfileUsage] = [:] {
-        didSet { if usage != oldValue { onUsageChange?() } }
+        didSet { if usage != oldValue { onUsageChange?(); onStatusUsageChange?() } }
     }
     /// Profiles with a usage read in flight; their previous reading stays visible.
     private(set) var readingUsage: Set<String> = []
@@ -36,6 +37,8 @@ final class WorkspaceStore {
     private(set) var guardMode = "off"
     private(set) var isRefreshing = false
     private(set) var launchingID: LaunchTarget.ID?
+    private(set) var isSwitchingDefault = false
+    private(set) var removingProfiles: Set<String> = []
     private(set) var statusMessage = "Choose a profile or workspace"
 
     private let client: CLIClient
@@ -85,7 +88,7 @@ final class WorkspaceStore {
 
     /// Whether a row may launch now: available, current and not being changed.
     func canLaunch(_ target: LaunchTarget) -> Bool {
-        target.isAvailable && !isChanging(target)
+        target.isAvailable && !isChanging(target) && !isSwitchingDefault && !removingProfiles.contains(target.profile)
     }
 
     func togglePin(_ workspace: WorkspaceBinding) {
@@ -274,14 +277,76 @@ final class WorkspaceStore {
     }
 
     @discardableResult
-    func createProfile(_ profile: String) async -> Bool {
+    func createProfile(_ profile: String, authFile: URL? = nil) async -> Bool {
         statusMessage = "Creating \(profile)…"
         notify()
         defer { notify() }
 
+        var created = false
         do {
+            if let authFile {
+                try ProfileAuthTransfer().validateSelectedAuth(authFile)
+                guard profile != "default", !(try await client.loadProfiles()).contains(profile) else {
+                    throw CLIClientError.commandFailed("Choose a new profile name before installing auth.json.")
+                }
+            }
             try await client.createProfile(profile)
-            return await refreshAfterMutation("Profile \(profile) created")
+            created = true
+            if let authFile {
+                let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory())
+                try await Task.detached(priority: .userInitiated) {
+                    try ProfileAuthTransfer().installSelectedAuth(authFile, into: profile, home: home)
+                }.value
+            }
+            return await refreshAfterMutation(authFile == nil
+                ? "Profile \(profile) created"
+                : "Profile \(profile) created with selected auth.json")
+        } catch {
+            if created { _ = await refresh() }
+            statusMessage = created && authFile != nil
+                ? "Profile \(profile) was created, but auth.json could not be installed: \(error.localizedDescription)"
+                : error.localizedDescription
+            onError?(statusMessage)
+            return false
+        }
+    }
+
+    @discardableResult
+    func removeProfile(_ profile: String) async -> Bool {
+        guard profile != "default", profiles.contains(profile), !removingProfiles.contains(profile), !isSwitchingDefault else { return false }
+        removingProfiles.insert(profile)
+        statusMessage = "Removing \(profile)…"
+        notify()
+        defer { removingProfiles.remove(profile); notify() }
+        do {
+            try await client.removeProfile(profile)
+            for workspace in workspaces where workspace.profile == profile { forget(workspace) }
+            workspaces.removeAll { $0.profile == profile }
+            profiles.removeAll { $0 == profile }
+            usage.removeValue(forKey: profile)
+            if selectedProfile == profile { selectedProfile = nil }
+            return await refreshAfterMutation("Profile \(profile) removed")
+        } catch {
+            statusMessage = error.localizedDescription
+            onError?(statusMessage)
+            return false
+        }
+    }
+
+    @discardableResult
+    func switchToDefault(from profile: String) async -> Bool {
+        guard profile != "default", profiles.contains(profile), !isSwitchingDefault, removingProfiles.isEmpty,
+              launchingID == nil else { return false }
+        isSwitchingDefault = true
+        statusMessage = "Switching \(profile) to default…"
+        notify()
+        defer { isSwitchingDefault = false; notify() }
+        do {
+            let backup = try await DefaultProfileSwitcher().switchToDefault(from: profile, client: client)
+            _ = await refresh()
+            await refreshUsage(force: true)
+            statusMessage = backup.map { "Opened default. Previous auth saved at \($0.path)" } ?? "Opened default with \(profile) authentication"
+            return true
         } catch {
             statusMessage = error.localizedDescription
             onError?(statusMessage)
@@ -415,7 +480,7 @@ final class WorkspaceStore {
 
     @discardableResult
     func launch(_ target: LaunchTarget, in destination: OpenDestination) async -> Bool {
-        guard launchingID == nil else { return false }
+        guard launchingID == nil, !isSwitchingDefault, !removingProfiles.contains(target.profile) else { return false }
         guard target.isAvailable else {
             showMessage(target.workspace?.availabilityReason ?? "Profile is unavailable")
             return false

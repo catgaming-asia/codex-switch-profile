@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var alerts = QuotaAlertController(store: store, notifier: notifier)
     private var menuController: WorkspaceMenuViewController?
     private var eventMonitor: Any?
+    private var statusRefreshTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let controller = WorkspaceMenuViewController(store: store, alerts: alerts)
@@ -29,6 +30,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.popover.contentSize = size
         }
         controller.onRequestClose = { [weak self] in self?.popover.performClose(nil) }
+        controller.onProfileNameVisibilityChange = { [weak self] in
+            guard let self else { return }
+            self.updateStatusItem(self.alerts.indicator)
+        }
         menuController = controller
 
         popover.behavior = .transient
@@ -49,9 +54,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         updateStatusItem(alerts.indicator)
         alerts.onIndicatorChange = { [weak self] indicator in self?.updateStatusItem(indicator) }
+        store.onStatusUsageChange = { [weak self] in
+            guard let self else { return }
+            self.updateStatusItem(self.alerts.indicator)
+        }
         notifier.onOpen = { [weak self] in self?.showMenu() }
-        // Shows existing state; background reads run only while alerts are on.
+        // Alerts keep their own notification schedule; the status text also refreshes while the app runs.
         alerts.start()
+        statusRefreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                guard let self else { return }
+                await self.store.refreshIfNeeded()
+                await self.store.refreshUsage()
+                try? await Task.sleep(for: .seconds(300), tolerance: .seconds(60))
+            }
+        }
 
         eventMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, self.popover.isShown, NSApp.modalWindow == nil,
@@ -77,10 +94,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem(_ indicator: QuotaIndicator) {
         guard let button = statusItem?.button else { return }
         let now = Date()
-        let label = indicator.accessibilityLabel(at: now)
+        let quota = DefaultMenuBarQuota(reading: store.usage["default"], at: now).text
+        let namesHidden = UserDefaults.standard.bool(forKey: "hideProfileNames")
+        let label = namesHidden ? "Codex Profiles" : indicator.accessibilityLabel(at: now)
         button.image = StatusItemIcon.image(for: indicator.level, accessibilityDescription: label)
-        button.toolTip = indicator.toolTip(at: now)
-        button.setAccessibilityLabel(label)
+        button.imagePosition = .imageLeading
+        button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+        button.title = quota ?? ""
+        statusItem?.length = quota == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        button.toolTip = namesHidden ? "Codex Profiles" : indicator.toolTip(at: now)
+        button.setAccessibilityLabel(quota.map { "\(label). Default Codex quota: \($0)" } ?? label)
     }
 
     private static var launchedAsLoginItem: Bool {
@@ -99,6 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        statusRefreshTask?.cancel()
         store.cancelUsageRefresh()
         NSWorkspace.shared.notificationCenter.removeObserver(self)
         if let eventMonitor {
@@ -118,7 +142,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
-            menuController?.focusSearch()
+            menuController?.focusMenu()
             Task { await store.refresh(); await store.refreshUsage() }
             Task { await alerts.refreshPermission() }
         }

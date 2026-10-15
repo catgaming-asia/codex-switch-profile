@@ -59,9 +59,9 @@ with a profile's quota and project shortcuts in the same menu.
 
 | In the menu | What you can do |
 | --- | --- |
-| **Profiles** | Create a profile and open it in ChatGPT or Terminal, with no project folder required. |
+| **Profiles** | Create a profile, open it in ChatGPT or Terminal, and click its avatar for quota details. |
 | **Codex quota** | See remaining CLI limits, low-quota warnings and reset times for each profile. |
-| **Projects** | Bind folders to profiles, pin favourites and find them with search or keyboard shortcuts. |
+| **Projects** | Bind folders to profiles, pin favourites and open them from the menu or keyboard. |
 
 The app bundles the `codex-profile` CLI engine. Both use the same profiles
 and project bindings. This is a community project, unaffiliated with OpenAI.
@@ -107,19 +107,32 @@ notarisation, see the [macOS build guide](https://github.com/Ducksss/codex-profi
 ### Open your first profile
 
 1. Click the menu bar icon. Existing profiles appear automatically.
-2. Choose **New profile…** in the gear menu, or **Create profile…** if the list
-   is empty. Give it a name such as `personal` or `work`.
-3. Select **ChatGPT**, click **Open** beside the profile and sign in inside
-   that window when prompted. Choose **Terminal** to start Codex CLI instead.
+2. Choose **Add profile…** at the bottom, **New profile…** in the gear menu, or **Create profile…** if the list
+   is empty. Give it a name such as `personal` or `work`. Optionally choose an
+   existing `auth.json` to copy into that new profile for Codex CLI usage.
+3. Use **Open in ChatGPT** in the profile's `…` menu and sign in inside
+   that window when prompted. Use **Open in Terminal** to start Codex CLI instead.
 
 Different names can stay open side by side. Reopening a name keeps its local
 data, and `default` opens your normal ChatGPT session. Enable **Open at Login**
 in the gear menu to keep the app available after you log in.
 
+Named profiles have a **Switch** button and **Remove profile…** in their actions menu.
+Clicking the profile row only selects it. Switching confirms, closes the Desktop app, backs up the
+previous default `auth.json`, copies the named profile's authentication into
+default, reopens Desktop and refreshes quota. Removing confirms before deleting
+the named profile's local data and workspace bindings.
+
 ### Check quota before opening a profile
 
 **Codex left** shows remaining CLI quota. Low readings turn orange or red
 and show their reset time. Hover for details or press **⌘R** to refresh.
+Click a profile's avatar to see its `5h` and weekly quota, reset times and
+last check on a separate Info page. **Back** returns to the profile list.
+The menu bar also shows `default`'s `5h` and weekly (`W`) remaining percentages,
+for example `5h 65% · W 63%`; it shows only the icon until that reading is available.
+Choose **Hide profile names** in the gear menu to mask profile names while
+capturing a screenshot, then **Show profile names** to restore them.
 
 The menu bar icon gains a badge when a profile runs low. Turn on
 **Low-quota alerts** in the gear menu for a notification when a profile
@@ -136,7 +149,7 @@ for supported accounts and troubleshooting.
 ### Open a project with its profile
 
 Choose **Add workspace…**, select a folder and assign a profile. Pin the
-projects you use often, then search and click **Open** to return to them.
+projects you use often, then click **Open** to return to them.
 The row's actions menu lets you change the profile, repair a moved folder or
 remove the shortcut. Bindings are local metadata and do not change project files.
 
@@ -147,9 +160,8 @@ remove the shortcut. Bindings are local metadata and do not change project files
 | --- | --- |
 | ↑ / ↓, then Return | Select and open a profile or project |
 | ⌘1–9 | Open the corresponding visible row |
-| ⌘K | Focus search |
 | ⌘R | Refresh profiles, projects and quota |
-| Escape | Clear search, then close the menu |
+| Escape | Return from Info, or close the menu |
 
 Opening the app again from Finder or Spotlight shows the menu. Terminal
 actions may request macOS Automation permission on first use. The
@@ -183,8 +195,11 @@ A named window's state covers **Chat, Work and Codex**. CLI commands such as
 `cli`, `login`, `env` and `use` select Codex state only and do not switch an
 open ChatGPT window. Profiles do not inherit from `default`.
 
-The tool opens the original signed ChatGPT app and does not read or copy
-authentication file contents or ChatGPT cookies. Desktop launch refuses a
+The tool opens the original signed ChatGPT app. The macOS menu can copy a
+selected `auth.json` into a newly created named profile. Its explicit
+**Switch** button copies a named profile's opaque `auth.json` to
+`default` after saving the previous default file as a private backup; routine
+launches never copy credentials or ChatGPT cookies. Desktop launch refuses a
 non-empty `CODEX_ACCESS_TOKEN` override. **Local-state separation is not an
 account, OS or server-side security boundary.** Use separate OS users for a
 stronger boundary. Read the [security model](SECURITY.md) and

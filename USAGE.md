@@ -102,7 +102,9 @@ codex-profile app work ~/Dev/work-project
 The first launch of a named window may require signing into ChatGPT. Reopening
 the same name reuses that name's Desktop process and data. Different names can
 run side by side. The launcher uses the original signed `ChatGPT.app`; it does
-not clone, patch, re-sign, quit, or replace the installed app.
+not clone, patch, re-sign, or replace the installed app. The explicit
+**Switch** button on a named profile requests a graceful quit before copying
+authentication.
 
 ## How profiles map to disk
 
@@ -373,6 +375,8 @@ initialized.
   its Electron context, while Codex also receives the matching `CODEX_HOME`.
   Account identity still must be verified in the relevant UI.
 - Opening a named window never quits the stock window or another profile.
+  The separately confirmed **Switch** button on a named profile does quit all
+  running windows of the same signed app before reopening default.
 
 ### Add named, color-coded macOS launchers
 
@@ -447,8 +451,10 @@ Move the app to Applications before turning on **Open at Login** in its gear
 menu. It includes its own `codex-profile`, so this tool needs no separate
 installation, but Terminal launches, Codex CLI sign-in and quota readings use
 the official Codex CLI. Quota belongs to each profile's Codex CLI sign-in; a
-named ChatGPT window may use a different account. The app never reads tokens
-or cookies. See the [macOS guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md) for keyboard shortcuts, quota
+named ChatGPT window may use a different account. The create-profile picker
+can install one selected `auth.json` in a new named home; the confirmed
+**Switch** button copies one into default. Neither parses or
+prints tokens or cookies. See the [macOS guide](https://github.com/Ducksss/codex-profiles/blob/main/macos/README.md) for keyboard shortcuts, quota
 details, and Developer ID signing.
 
 ### Read Desktop logs
@@ -873,9 +879,10 @@ the session store.
 Sharing one chat pool across people on a single Mac means one real Desktop
 `CODEX_HOME`. Separate ChatGPT logins then need that account's `auth.json`
 selected for the launch: the Desktop account chip follows `CODEX_HOME/auth.json`,
-not Electron user-data alone. This tool does not copy `auth.json`. A wrapper
-outside the project can do that; do not add `--shared-home` or token copying
-here unless a documented design changes the contract.
+not Electron user-data alone. The macOS menu offers an explicit, confirmed
+**Switch** button that copies a named profile's opaque `auth.json`
+into default after backing up the previous file. Do not add `--shared-home`
+or automatic token sharing.
 
 ## AI assistants
 

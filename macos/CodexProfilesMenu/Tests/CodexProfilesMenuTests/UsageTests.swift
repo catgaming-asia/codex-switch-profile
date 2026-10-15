@@ -42,9 +42,15 @@ enum UsageTests {
             "remaining quota must not become negative")
         let now = Date(timeIntervalSince1970: 1000)
         let cached = ProfileUsage.available(limits, checkedAt: now)
+        expect(DefaultMenuBarQuota(reading: cached, at: now).text == "5h 77% · W 9%",
+            "menu bar must show the default profile's 5-hour and weekly remaining quota")
+        expect(DefaultMenuBarQuota(reading: .unavailable(checkedAt: now), at: now).text == nil,
+            "unavailable usage must leave the menu bar icon without a percentage")
         expect(!cached.needsRefresh(at: now.addingTimeInterval(59)), "reopening should reuse a fresh reading")
         expect(cached.needsRefresh(at: now.addingTimeInterval(60)), "the next open must refresh after 60 seconds")
         let expired = ProfileUsage.available(CodexRateLimits(windows: [RateLimitWindow(usedPercent: 90, windowDurationMins: 300, resetsAt: 1001)]), checkedAt: now)
+        expect(DefaultMenuBarQuota(reading: expired, at: now.addingTimeInterval(2)).text == nil,
+            "a passed reset must not leave a stale percentage in the menu bar")
         expect(expired.needsRefresh(at: now.addingTimeInterval(2)), "a reset must invalidate cached usage")
         let expiredDetail = UsageState(reading: expired).detail(at: now.addingTimeInterval(2))
         expect(expiredDetail.contains("Awaiting a fresh reading") && expiredDetail.contains("Reset at") && !expiredDetail.contains("Resets in"),

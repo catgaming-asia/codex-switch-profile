@@ -31,6 +31,8 @@ struct MenuInteractionTests {
         var profileClosed = false
         firstRunController.onRequestClose = { profileClosed = true }
         let profileRow = descendants(firstRunController.view).compactMap { $0 as? LaunchRowButton }.first!
+        expect(descendants(profileRow).compactMap { $0 as? NSButton }.contains { $0.title == "Switch" },
+            "named profiles must offer Switch instead of Open")
         let usageView = descendants(profileRow).compactMap { $0 as? ProfileUsageView }.first!
         expect(descendants(usageView).compactMap { $0 as? NSTextField }.map(\.stringValue) == ["5h", "77%", "7d", "9%"],
             "profile rows must show remaining percentages and actual window durations")
@@ -38,8 +40,15 @@ struct MenuInteractionTests {
             "quota and reset times must be available to accessibility clients")
         expect(usageView.toolTip!.contains("ChatGPT may use a different account") && usageView.toolTip!.contains("Checked"),
             "quota tooltips must explain sign-in scope and freshness")
+        try? FileManager.default.removeItem(at: marker)
+        profileRow.performClick(nil)
+        expect(!profileClosed && !FileManager.default.fileExists(atPath: marker.path) && profileRow.isSelectedRow,
+            "clicking a profile row must select it without opening a separate window")
+        let firstProfileMenu = firstRunController.actionsMenu(for: .profile("work"))
         let profileArguments = try await launchArguments(recordedIn: marker, until: { profileClosed },
-            "a profile launch must dismiss the menu and record its arguments") { openButton(in: profileRow).performClick(nil) }
+            "a profile menu launch must dismiss the menu and record its arguments") {
+            firstProfileMenu.performActionForItem(at: firstProfileMenu.indexOfItem(withTitle: "Open in ChatGPT"))
+        }
         expect(profileArguments == "app\nwork\n", "a profile must open without supplying a workspace path")
         expect(store.workspaces.isEmpty, "opening a profile must not create a workspace binding")
         store.loadPreview([], profiles: [])
@@ -56,7 +65,7 @@ struct MenuInteractionTests {
         window.contentViewController = controller
         window.setContentSize(controller.preferredContentSize)
         controller.view.layoutSubtreeIfNeeded()
-        controller.focusSearch()
+        controller.focusMenu()
         expect(controller.preferredContentSize.width == 400, "popover must retain compact reference width")
         let allViews = descendants(controller.view)
         expect(!(controller.view is NSVisualEffectView) && !allViews.contains { $0 is NSVisualEffectView },
@@ -68,12 +77,11 @@ struct MenuInteractionTests {
         expect(abs(titleCenter.y - optionsCenter.y) < 1, "title and options must share one compact header line")
         let headerIcon = title.superview!.subviews.compactMap { $0 as? NSImageView }.first!
         expect(isMonochrome(headerIcon.contentTintColor), "header symbol must use native monochrome tint")
-        let searchFields = allViews.compactMap { $0 as? NSSearchField }
-        expect(searchFields.count == 1, "workspace search must use native NSSearchField")
-        let search = searchFields[0]
+        expect(!allViews.contains { $0 is NSSearchField }, "menu must omit the Search field")
+        expect(!controller.handleShortcut(key(40, characters: "k", modifiers: .command)), "Command-K must no longer focus Search")
         expect(allViews.contains { $0 is NSPopUpButton }, "profile filter must remain available")
         expect(allViews.contains { $0 is NSSegmentedControl }, "launch destination must remain available")
-        let initialRows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
+        var initialRows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
         let list = descendants(controller.view).compactMap { $0 as? NSScrollView }.first!
         let listWidth = list.contentView.bounds.width
         expect(initialRows.count == 4, "initialized profiles and all bindings must be rendered")
@@ -85,12 +93,14 @@ struct MenuInteractionTests {
         expect(separators.allSatisfy { abs($0.frame.width - listWidth) < 1 }, "row separators must fill the list width")
         let profileUsage = descendants(initialRows[0]).compactMap { $0 as? ProfileUsageView }.first!
         let profileName = descendants(initialRows[0]).compactMap { $0 as? NSTextField }.first { $0.stringValue == "work" }!
-        let profileOpen = openButton(in: initialRows[0])
+        let profileSwitch = descendants(initialRows[0]).compactMap { $0 as? NSButton }.first { $0.title == "Switch" }!
         let nameFrame = initialRows[0].convert(profileName.bounds, from: profileName)
         let usageFrame = initialRows[0].convert(profileUsage.bounds, from: profileUsage)
-        let openFrame = initialRows[0].convert(profileOpen.bounds, from: profileOpen)
+        let openFrame = initialRows[0].convert(profileSwitch.bounds, from: profileSwitch)
         expect(usageFrame.width == ProfileUsageView.columnWidth && nameFrame.maxX <= usageFrame.minX && usageFrame.maxX < openFrame.minX,
-            "quota must fit beside the profile without obscuring its name or Open button")
+            "quota must fit beside the profile without obscuring its name or Switch button")
+        expect(allViews.compactMap { $0 as? NSButton }.contains { $0.title == "Add profile…" },
+            "footer must offer profile creation beside Add workspace")
         for row in initialRows where row.item.workspace != nil {
             expect(!descendants(row).contains { $0 is ProfileUsageView }, "workspace rows must not duplicate account quota")
             let workspace = row.item.workspace!
@@ -108,6 +118,22 @@ struct MenuInteractionTests {
                 "rows must remain compact while leaving space for missing-folder guidance")
         }
         expect(initialRows.allSatisfy { !$0.isSelectedRow }, "opening must not paint an unsolicited grey selection")
+        try? FileManager.default.removeItem(at: marker)
+        let avatar = descendants(initialRows[0]).compactMap { $0 as? NSButton }.first { $0.toolTip == "Account info for work" }!
+        avatar.performClick(nil)
+        let infoLabels = descendants(controller.view).compactMap { $0 as? NSTextField }.map(\.stringValue)
+        expect(infoLabels.contains("Account info") && infoLabels.contains("Profile work")
+            && infoLabels.contains("5h  ·  77% remaining") && infoLabels.contains("W (7d)  ·  9% remaining")
+            && infoLabels.contains { $0.hasPrefix("Checked ") }
+            && !FileManager.default.fileExists(atPath: marker.path),
+            "avatar must open account info with quota and last check without launching")
+        expect(descendants(controller.view).compactMap { $0 as? LaunchRowButton }.isEmpty,
+            "account info must replace the profile list")
+        let back = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.title == "Back" }!
+        back.performClick(nil)
+        initialRows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
+        expect(initialRows.count == 4 && back.isHidden, "Back must restore the profile list")
+        controller.focusMenu()
         expect(initialRows.first(where: { $0.item.workspace == missing })?.isEnabled == false, "missing workspace must not launch")
         expect(descendants(initialRows.first(where: { $0.item.workspace == missing })!).contains { ($0 as? NSButton)?.toolTip?.contains("remove binding") == true }, "missing rows must retain an actions button")
         expect(controller.handleShortcut(key(125)), "down arrow must be handled")
@@ -124,40 +150,18 @@ struct MenuInteractionTests {
         window.makeFirstResponder(actions)
         expect(!controller.handleShortcut(key(36)), "Return on an actions button must retain its native action")
         expect(!controller.handleShortcut(key(125)), "arrows on a native control must retain native behaviour")
-        controller.focusSearch()
-        expect(initialRows.allSatisfy { !$0.isSelectedRow }, "focusing search on reopening must clear old selection")
+        controller.focusMenu()
+        expect(initialRows.allSatisfy { !$0.isSelectedRow }, "reopening the menu must clear old selection")
         expect(controller.handleShortcut(key(126)), "up arrow must be handled from an unselected list")
         expect(initialRows.first(where: { $0.item.workspace == last })?.isSelectedRow == true,
             "first up arrow must select the last available workspace")
-        controller.focusSearch()
-        search.stringValue = "last"
-        expect(search.sendAction(search.action, to: search.target), "native search action must have a receiver")
-        expect(descendants(controller.view).compactMap { $0 as? LaunchRowButton }.count == 1, "search must replace list with matching workspace")
-        expect(descendants(controller.view).compactMap { $0 as? LaunchRowButton }.allSatisfy { !$0.isSelectedRow },
-            "typing a new search must clear prior keyboard selection")
-        search.stringValue = ""
-        _ = search.sendAction(search.action, to: search.target)
-        expect(store.query.isEmpty && descendants(controller.view).compactMap { $0 as? LaunchRowButton }.count == 4,
-            "native search cancel action must restore all workspaces")
-        search.stringValue = "does-not-exist"
-        _ = search.sendAction(search.action, to: search.target)
-        window.setContentSize(controller.preferredContentSize)
-        controller.view.layoutSubtreeIfNeeded()
-        let reset = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.title == "Reset filters" }!
-        expect(controller.view.convert(reset.bounds, from: reset).minY >= 50,
-            "the no-match reset button must fit above the footer with padding")
-        reset.performClick(nil)
-        expect(store.query.isEmpty && descendants(controller.view).compactMap { $0 as? LaunchRowButton }.count == 4,
-            "reset filters must restore the profile and workspace rows")
-        search.stringValue = "last"
-        _ = search.sendAction(search.action, to: search.target)
+        controller.focusMenu()
         var closed = false
         controller.onRequestClose = { closed = true }
         expect(controller.handleShortcut(key(53)), "escape must be handled")
-        expect(store.query.isEmpty && !closed, "first escape must clear search without dismissing")
-        expect(controller.handleShortcut(key(53)), "escape must dismiss without query")
-        expect(closed, "empty-query escape must request popover close")
+        expect(closed, "escape must request popover close")
         closed = false
+        controller.focusMenu()
         _ = controller.handleShortcut(key(125))
         _ = controller.handleShortcut(key(125))
         _ = controller.handleShortcut(key(125))
@@ -166,21 +170,12 @@ struct MenuInteractionTests {
         expect(args.contains(last.path), "Return must launch selected available workspace")
         expect(!args.contains(missing.path), "keyboard launch must skip missing workspace")
         closed = false
-        search.stringValue = "first"
-        _ = search.sendAction(search.action, to: search.target)
-        let firstRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first!
+        let firstRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item.workspace == first }!
         let clickArgs = try await launchArguments(recordedIn: marker, until: { closed },
             "successful explicit Open action must dismiss popover and record its arguments") { openButton(in: firstRow).performClick(nil) }
         expect(clickArgs.contains(first.path), "Open must launch its own workspace")
         expect(!clickArgs.contains(last.path), "Open must replace the prior launch arguments")
-        closed = false
-        search.stringValue = "last"
-        _ = search.sendAction(search.action, to: search.target)
-        let returnArgs = try await launchArguments(recordedIn: marker, until: { closed },
-            "Return without arrow navigation must dismiss popover and record its arguments") { _ = controller.handleShortcut(key(36)) }
-        expect(returnArgs.contains(last.path), "Return without arrow navigation must open the first available search result")
-        store.query = ""
-        controller.focusSearch()
+        controller.focusMenu()
         closed = false
         let shortcutArguments = try await launchArguments(recordedIn: marker, until: { closed },
             "Command-1 must dismiss popover and record its arguments") {
@@ -229,7 +224,8 @@ struct MenuInteractionTests {
         let quotaRows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
         expect(descendants(quotaRows[0]).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Unavailable" },
             "missing quota must say Unavailable rather than zero")
-        expect(openButton(in: quotaRows[0]).isEnabled, "unavailable quota must not disable Open")
+        expect(descendants(quotaRows[0]).compactMap { $0 as? NSButton }.first { $0.title == "Switch" }?.isEnabled == true,
+            "unavailable quota must not disable Switch")
         expect(descendants(quotaRows[1]).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "—" },
             "a passed reset must not show stale percentages")
         let longName = descendants(quotaRows[0]).compactMap { $0 as? NSTextField }.first { $0.stringValue == "very-long-profile-name-for-a-client" }!
@@ -270,7 +266,7 @@ struct MenuInteractionTests {
             "a row being changed must show progress and refuse launches")
         expect(descendants(changingRow).compactMap { $0 as? NSButton }.first { $0.toolTip?.contains("remove binding") == true }?.isEnabled == false,
             "a row being changed must not accept another change")
-        controller.focusSearch()
+        controller.focusMenu()
         _ = controller.handleShortcut(key(125))
         _ = controller.handleShortcut(key(125))
         _ = controller.handleShortcut(key(125))
@@ -291,8 +287,17 @@ struct MenuInteractionTests {
         expect(choices.items.first { $0.title == "work" }?.isEnabled == false && choices.items.first { $0.title == "personal" }?.isEnabled == true,
             "only another profile may be chosen")
         let profileMenu = controller.actionsMenu(for: .profile("work"))
-        expect(["Open in ChatGPT", "Open in Terminal", "Add workspace…", "Sign in to Codex CLI…"].allSatisfy { item($0, in: profileMenu).isEnabled },
-            "profile actions must offer both destinations, a workspace shortcut and CLI sign-in")
+        expect(["Open in ChatGPT", "Open in Terminal", "Add workspace…", "Sign in to Codex CLI…", "Remove profile…"].allSatisfy { item($0, in: profileMenu).isEnabled },
+            "profile actions must offer launches, removal and CLI sign-in")
+        expect(profileMenu.items.allSatisfy { $0.title != "Switch to default…" },
+            "Switch to default must move from the menu to the profile row")
+        let defaultMenu = controller.actionsMenu(for: .profile("default"))
+        expect(defaultMenu.items.allSatisfy { $0.title != "Switch to default…" && $0.title != "Remove profile…" },
+            "the stock default profile must not offer switching or removal")
+        store.loadPreview([], profiles: ["default", "work"])
+        let defaultRow = descendants(controller.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("default") }!
+        expect(!descendants(defaultRow).compactMap { $0 as? NSButton }.contains { $0.title == "Switch" || $0.title == "Open" },
+            "default profile must have no primary action button")
 
         // A row action opens the other destination without changing the default.
         defaults.set(OpenDestination.terminal.rawValue, forKey: "openDestination")
@@ -359,6 +364,44 @@ struct MenuInteractionTests {
         try await waitUntil { !alerts.isEnabled }
         expect(!alerts.isEnabled && !store.isRefreshingUsageInBackground && item("Low-quota alerts", in: alertsController.settingsMenu()).state == .off,
             "choosing it again must turn alerts and background reads off")
+
+        // Screenshot mode masks visible profile names while keeping actions bound to real profiles.
+        let privacyStore = WorkspaceStore(client: CLIClient(executableURL: executable), defaults: defaults)
+        privacyStore.loadPreview([first], profiles: ["default", "work"], usage: ["work": quota])
+        let privacyController = WorkspaceMenuViewController(store: privacyStore, defaults: defaults)
+        _ = privacyController.view
+        var visibilityChanges = 0
+        privacyController.onProfileNameVisibilityChange = { visibilityChanges += 1 }
+        let hideMenu = privacyController.settingsMenu()
+        hideMenu.performActionForItem(at: hideMenu.indexOfItem(withTitle: "Hide profile names"))
+        expect(defaults.bool(forKey: "hideProfileNames") && visibilityChanges == 1,
+            "Hide profile names must persist and update the status item")
+        let hiddenLabels = descendants(privacyController.view).compactMap { $0 as? NSTextField }.map(\.stringValue)
+        expect(hiddenLabels.contains("••••") && !hiddenLabels.contains("work") && !hiddenLabels.contains("default")
+            && !hiddenLabels.contains { $0.hasPrefix("work · ") },
+            "screenshot mode must mask profile names in rows and workspace metadata")
+        let hiddenPicker = descendants(privacyController.view).compactMap { $0 as? NSPopUpButton }.first!
+        expect(hiddenPicker.item(at: 1)?.title == "•••• 1" && hiddenPicker.item(at: 2)?.title == "•••• 2",
+            "profile filter must not reveal names in screenshot mode")
+        hiddenPicker.selectItem(at: 2)
+        _ = hiddenPicker.sendAction(hiddenPicker.action, to: hiddenPicker.target)
+        expect(privacyStore.selectedProfile == "work", "masked filter must still select the real profile")
+        let hiddenSignIn = item("Sign in to Codex CLI", in: privacyController.settingsMenu()).submenu!
+        expect(hiddenSignIn.items.map(\.title) == ["•••• 1", "•••• 2"]
+            && hiddenSignIn.items[1].representedObject as? String == "work",
+            "masked menu entries must keep their real profile targets")
+        let maskedRow = descendants(privacyController.view).compactMap { $0 as? LaunchRowButton }.first { $0.item == .profile("work") }!
+        let maskedAvatar = descendants(maskedRow).compactMap { $0 as? NSButton }.first { $0.toolTip == "Account info for ••••" }!
+        maskedAvatar.performClick(nil)
+        let maskedInfo = descendants(privacyController.view).compactMap { $0 as? NSTextField }.map(\.stringValue)
+        expect(maskedInfo.contains("Profile ••••") && !maskedInfo.contains("Profile work"),
+            "account info must respect Hide profile names")
+        descendants(privacyController.view).compactMap { $0 as? NSButton }.first { $0.title == "Back" }!.performClick(nil)
+        let showMenu = privacyController.settingsMenu()
+        showMenu.performActionForItem(at: showMenu.indexOfItem(withTitle: "Show profile names"))
+        expect(!defaults.bool(forKey: "hideProfileNames") && visibilityChanges == 2
+            && descendants(privacyController.view).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "work" },
+            "Show profile names must restore the visible names")
 
         // The status icon stays a labelled template image; low quota changes
         // its shape, never only its colour.

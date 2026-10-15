@@ -167,6 +167,8 @@ Tell the user:
 - whether `doctor` passed and what remains unresolved;
 - whether an interactive Codex or ChatGPT sign-in is still required.
 
-Never print credential contents. Never copy or link `auth.json`, `sessions/`,
+Never print credential contents. Do not manually copy or link `auth.json`, `sessions/`,
 `state_5.sqlite`, logs, cookies, or Electron data between profiles. Local-state
-separation is not an account, OS, or server-side boundary.
+separation is not an account, OS, or server-side boundary. The macOS menu can
+copy an explicitly selected `auth.json` into a newly created profile, or copy
+one to default through its confirmed named profile **Switch** button.

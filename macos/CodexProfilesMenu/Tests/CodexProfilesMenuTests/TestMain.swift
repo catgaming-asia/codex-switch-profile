@@ -172,6 +172,46 @@ struct CodexProfilesMenuTests {
 
         let defaultCreated = await store.createProfile("default")
         expect(defaultCreated && store.profiles.contains("default"), "default could not be initialized")
+        let defaultConfig = URL(fileURLWithPath: home).appendingPathComponent(".codex/config.toml")
+        try Data("model = \"default-only\"\n".utf8).write(to: defaultConfig)
+        let selectedFolder = URL(fileURLWithPath: home).appendingPathComponent("selected-auth")
+        try FileManager.default.createDirectory(at: selectedFolder, withIntermediateDirectories: true)
+        let selectedAuth = selectedFolder.appendingPathComponent("auth.json")
+        try Data("selected-token".utf8).write(to: selectedAuth)
+        expect(await store.createProfile("with-auth", authFile: selectedAuth), "profile creation with selected authentication failed")
+        let installedAuth = URL(fileURLWithPath: home).appendingPathComponent(".codex-with-auth/auth.json")
+        expect(try String(contentsOf: installedAuth) == "selected-token", "selected authentication was not installed")
+        expect(try String(contentsOf: selectedAuth) == "selected-token", "selected authentication source was changed")
+        expect(!FileManager.default.fileExists(atPath: URL(fileURLWithPath: home).appendingPathComponent(".codex-with-auth/config.toml").path),
+            "auth selection unexpectedly cloned default configuration")
+        let installedMode = try FileManager.default.attributesOfItem(atPath: installedAuth.path)[.posixPermissions] as? NSNumber
+        expect(installedMode?.intValue == 0o600, "new profile authentication must be private")
+        expect(!(await store.createProfile("with-auth", authFile: selectedAuth)), "selected authentication overwrote an existing profile")
+        expect(try String(contentsOf: installedAuth) == "selected-token", "existing profile authentication changed")
+        try FileManager.default.removeItem(at: selectedAuth)
+        try FileManager.default.createSymbolicLink(at: selectedAuth, withDestinationURL: installedAuth)
+        expect(!(await store.createProfile("unsafe-auth", authFile: selectedAuth)), "symlinked selected authentication was accepted")
+        expect(!FileManager.default.fileExists(atPath: URL(fileURLWithPath: home).appendingPathComponent(".codex-unsafe-auth").path),
+            "invalid selected authentication left an empty profile")
+        try FileManager.default.removeItem(at: selectedAuth)
+        let sourceAuth = profileHome.appendingPathComponent("auth.json")
+        let defaultAuth = URL(fileURLWithPath: home).appendingPathComponent(".codex/auth.json")
+        try Data("named-token".utf8).write(to: sourceAuth)
+        try Data("previous-default-token".utf8).write(to: defaultAuth)
+        let backup = try ProfileAuthTransfer().copyToDefault(from: "work-main", home: URL(fileURLWithPath: home))
+        expect(try String(contentsOf: defaultAuth) == "named-token", "default authentication did not receive the selected profile")
+        expect(try String(contentsOf: backup!) == "previous-default-token", "previous default authentication was not preserved")
+        let defaultMode = try FileManager.default.attributesOfItem(atPath: defaultAuth.path)[.posixPermissions] as? NSNumber
+        let backupMode = try FileManager.default.attributesOfItem(atPath: backup!.path)[.posixPermissions] as? NSNumber
+        expect(defaultMode?.intValue == 0o600 && backupMode?.intValue == 0o600, "authentication files must be private")
+        expect(try String(contentsOf: sourceAuth) == "named-token", "source authentication was changed")
+        try FileManager.default.removeItem(at: sourceAuth)
+        try FileManager.default.createSymbolicLink(at: sourceAuth, withDestinationURL: backup!)
+        do {
+            _ = try ProfileAuthTransfer().copyToDefault(from: "work-main", home: URL(fileURLWithPath: home))
+            expect(false, "symlinked authentication was accepted")
+        } catch DefaultProfileSwitchError.unsafePath {} catch { expect(false, "unsafe authentication returned the wrong error") }
+        try FileManager.default.removeItem(at: sourceAuth)
         let existingCreated = await store.createProfile("work-main")
         expect(existingCreated && store.workspaces.count == 1, "existing profile creation lost its workspace")
         await expectFailure({ try await client.createProfile("../escape") }, containing: "Start with a letter or number")
@@ -191,6 +231,9 @@ struct CodexProfilesMenuTests {
         expect(store.isPinned(moved) && !store.isPinned(previous), "real relocation lost pin preferences")
         let recents = defaults.dictionary(forKey: "workspaceRecents") as? [String: TimeInterval]
         expect(recents?[moved.id] == 123.0 && recents?[previous.id] == nil, "real relocation lost recent preferences")
+        expect(await store.removeProfile("work-main"), "removing a named profile failed")
+        expect(!FileManager.default.fileExists(atPath: profileHome.path) && store.workspaces.isEmpty && !store.profiles.contains("work-main"),
+            "removal left the profile home or workspace bindings behind")
     }
 
     private static func testErrorsRemainActionable() async throws {

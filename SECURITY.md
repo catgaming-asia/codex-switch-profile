@@ -35,7 +35,9 @@ cookies, connector credentials, private logs, or account identifiers.
 Local-state separation is not an account, OS, or server-side boundary.
 
 The launcher uses the original signed ChatGPT (or legacy Codex) application.
-It does not clone, patch, re-sign, replace, quit, or kill the installed app.
+It does not clone, patch, re-sign, replace, or kill the installed app. The
+confirmed macOS menu **Switch** button on a named profile requests a graceful quit of
+all running instances of that app before replacing default authentication.
 Compatibility spellings such as `--instance`, `--rebuild`, and `app-instance`
 do not restore the old clone behavior.
 
@@ -45,6 +47,12 @@ launched window. Unset it before `app`; Codex-only `cli` and `login` commands
 remain available for explicit access-token workflows. Provider/API credentials
 are shared shell or operating-system state outside the local state selected by
 this wrapper.
+
+The macOS menu can optionally copy a user-selected `auth.json` into a newly
+created named profile. The file must be regular, nonempty, and named exactly
+`auth.json`; the copy has mode `600`. Existing profile authentication is not
+overwritten by this creation flow. Codex quota is refreshed afterward, while
+the separate ChatGPT window may still require sign-in.
 
 ## What the project does not verify
 

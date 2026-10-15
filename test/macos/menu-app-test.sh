@@ -40,6 +40,7 @@ swiftc \
   -parse-as-library \
   "$APP_SOURCE_DIR/WorkspaceModels.swift" \
   "$APP_SOURCE_DIR/CLIClient.swift" \
+  "$APP_SOURCE_DIR/DefaultProfileSwitcher.swift" \
   "$APP_SOURCE_DIR/AccountUsage.swift" \
   "$APP_SOURCE_DIR/WorkspaceStore.swift" \
   "$APP_SOURCE_DIR/QuotaAlerts.swift" \

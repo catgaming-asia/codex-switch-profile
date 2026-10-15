@@ -170,6 +170,20 @@ struct UsageState: Equatable {
     }
 }
 
+/// Compact menu-bar text for the stock default profile's Codex CLI quota.
+struct DefaultMenuBarQuota: Equatable {
+    let text: String?
+
+    init(reading: ProfileUsage?, at now: Date = Date()) {
+        guard case let .available(limits, _) = reading else { text = nil; return }
+        let windows = [(300, "5h"), (10_080, "W")].compactMap { duration, label -> String? in
+            guard let window = limits.windows.first(where: { $0.windowDurationMins == duration && !$0.hasReset(at: now) }) else { return nil }
+            return "\(label) \(window.remainingPercent)%"
+        }
+        text = windows.isEmpty ? nil : windows.joined(separator: " · ")
+    }
+}
+
 enum UsageReadError: Error, Equatable {
     case unavailable
     case timedOut

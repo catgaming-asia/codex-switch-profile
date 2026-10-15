@@ -112,13 +112,16 @@ Profile-to-path mapping: `default -> ~/.codex`; any other name `<x> -> ~/.codex-
 - Keep the scope contract explicit: `cli`/`login`/`env`/`use` are Codex-only;
   `app default` preserves stock ChatGPT Desktop state; named `app` launches use
   matching `CODEX_HOME` and Electron data for the entire ChatGPT window.
-- Do not add `--shared-home`, auth.json copying, or store-level session
-  symlinks. Current Codex Desktop canonicalizes rollout paths, so a `sessions/`
+- Do not add `--shared-home` or store-level session symlinks. The macOS menu's
+  optional create-profile file picker copies one chosen `auth.json` into a new
+  named home, and a named profile's **Switch** button copies its credential
+  into default while retaining a private backup. Current Codex
+  Desktop canonicalizes rollout paths, so a `sessions/`
   link that escapes `CODEX_HOME` breaks fork and side chats. Desktop identity
-  follows `CODEX_HOME/auth.json`, not Electron data alone. Downstream wrappers
-  may decouple those; this tool must not.
+  follows `CODEX_HOME/auth.json`, not Electron data alone.
 - Desktop code must launch the original signed bundle. Do not reintroduce app
-  clones, metadata patching, ad-hoc signing, global quitting, or broad kills.
+  clones, metadata patching, ad-hoc signing, or broad kills. Only the explicit
+  named profile **Switch** button may request a graceful quit of that app.
 - Keep `--instance`, `--rebuild`, and `app-instance` as deprecated
   compatibility spellings until a documented breaking release.
 - AUR scripts may prepare and verify only. The maintainer-owned, reviewed AUR
@@ -137,8 +140,9 @@ link.
 ## Safety boundaries (state these accurately)
 
 - CLI-oriented commands select `CODEX_HOME`; named Desktop launches also select
-  per-profile Electron user data. The tool never reads, copies, prints, parses,
-  compares, or migrates `auth.json` tokens or ChatGPT cookies.
+  per-profile Electron user data. The macOS create-profile picker and confirmed
+  named profile **Switch** button copy opaque `auth.json` bytes; no command parses,
+  prints, compares, or uploads tokens or ChatGPT cookies.
 - `clone-config` copies only an allowlist of non-secret root config files and
   refuses sensitive-looking key names.
 - `init --share-with` links only the documented configuration allowlist. It

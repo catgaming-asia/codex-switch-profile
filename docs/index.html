@@ -222,7 +222,7 @@
           "name": "Why does fork fail with rollout path must be in Codex home directory?",
           "acceptedAnswer": {
             "@type": "Answer",
-            "text": "Current Codex Desktop resolves the rollout path before checking that it stays under CODEX_HOME. A sessions/ or state_5.sqlite symlink from a named home into another home makes that check fail, so fork and side chats break. A shared state_5.sqlite also breaks archive and delete, which restrict rollout paths to sessions/ and mention that directory in the error. init --share-with never creates those links. Do not symlink the session store. Sharing chats across people means one real Desktop CODEX_HOME. Separate ChatGPT logins then require selecting that account's auth.json; the account chip follows CODEX_HOME auth.json, not Electron user-data alone. This tool does not copy auth.json."
+            "text": "Current Codex Desktop resolves the rollout path before checking that it stays under CODEX_HOME. A sessions/ or state_5.sqlite symlink from a named home into another home makes that check fail, so fork and side chats break. A shared state_5.sqlite also breaks archive and delete, which restrict rollout paths to sessions/ and mention that directory in the error. init --share-with never creates those links. Do not symlink the session store. Sharing chats across people means one real Desktop CODEX_HOME. Separate ChatGPT logins then require selecting that account's auth.json; the account chip follows CODEX_HOME auth.json, not Electron user-data alone. Named launches do not copy auth.json. The macOS menu can install a selected auth.json in a new named profile or copy one into default after a private backup."
           }
         }
       ]
@@ -1319,7 +1319,7 @@ codex-profile doctor</code></pre>
               <li><code>personal</code> &rarr; <code>~/.codex-personal</code></li>
               <li><code>edu</code> &rarr; <code>~/.codex-edu</code></li>
             </ul>
-            <p>Each home keeps its own auth, config, sessions, plugins, caches, and logs. Unlike swapping a single <code>auth.json</code>, codex-profiles never copies or migrates tokens.</p>
+            <p>Each home keeps its own auth, config, sessions, plugins, caches, and logs. Named launches keep credentials separate. The macOS menu can install a selected <code>auth.json</code> when creating a profile, or copy a named profile’s file into default after confirmation and a private backup.</p>
           </div>
         </div>
       </div>
@@ -1482,7 +1482,7 @@ codex-profile doctor</code></pre>
         </article>
         <article>
           <h3>Why does fork fail with rollout path must be in Codex home directory?</h3>
-          <p>Current Codex Desktop resolves the rollout path before checking that it stays under CODEX_HOME. A sessions/ or state_5.sqlite symlink from a named home into another home makes that check fail, so fork and side chats break. A shared state_5.sqlite also breaks archive and delete, which restrict rollout paths to sessions/ and mention that directory in the error. init --share-with never creates those links. Do not symlink the session store. Sharing chats across people means one real Desktop CODEX_HOME. Separate ChatGPT logins then require selecting that account's auth.json; the account chip follows CODEX_HOME auth.json, not Electron user-data alone. This tool does not copy auth.json.</p>
+          <p>Current Codex Desktop resolves the rollout path before checking that it stays under CODEX_HOME. A sessions/ or state_5.sqlite symlink from a named home into another home makes that check fail, so fork and side chats break. A shared state_5.sqlite also breaks archive and delete, which restrict rollout paths to sessions/ and mention that directory in the error. init --share-with never creates those links. Do not symlink the session store. Sharing chats across people means one real Desktop CODEX_HOME. Separate ChatGPT logins then require selecting that account's auth.json; the account chip follows CODEX_HOME auth.json, not Electron user-data alone. Named launches do not copy auth.json. The macOS menu can install a selected auth.json in a new named profile or copy one into default after a private backup.</p>
         </article>
       </div>
     </section>
@@ -1491,7 +1491,7 @@ codex-profile doctor</code></pre>
       <div class="section-head">
         <p class="eyebrow">Trust</p>
         <h2 id="trust">The boundary is explicit local state.</h2>
-        <p class="lede">Codex-only commands select a CODEX_HOME. Named app launches also select separate Electron state for the whole ChatGPT window. The project never copies authentication files and documents what remains shared.</p>
+        <p class="lede">Codex-only commands select a CODEX_HOME. Named app launches also select separate Electron state for the whole ChatGPT window. The macOS menu copies authentication only through explicit profile actions and documents what remains shared.</p>
       </div>
       <div class="grid">
         <article class="item">

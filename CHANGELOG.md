@@ -9,6 +9,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Changed
 
+- The CI workflow no longer runs automatically on pushes or pull requests; run it manually from the Actions tab (`workflow_dispatch`).
 - The macOS menu app's Codex Profiles and Claude Profiles headers now share one style (44-point row, 13-point semibold Title Case, 16-point icon, one thin separator), and clicking anywhere on a header's title row, including the empty space, folds or unfolds that section. Options and Add stay separate buttons.
 - The macOS menu app now marks Codex with a monochrome terminal symbol and Claude with a sun symbol, the same SF Symbols in the menu bar, In use and the Codex and Claude profile headers (Claude profiles had none). Profile avatar and key icons are unchanged, as is the app icon.
 - The macOS menu app is now displayed and built as **AI Profile.app**. The bundle identifier, executable name and saved state are unchanged.

@@ -69,7 +69,14 @@ struct ClaudeProfileSmoke {
         _ = store.switchTo("api1")
         expect(!(try? String(contentsOf: settings, encoding: .utf8))!.contains("sk-secret-value"), "no key in settings")
 
-        expect(store.open(account) == nil && store.signIn(account) == nil && store.open(api) == nil, "launch actions")
+        expect(store.open(.defaultAccount) == nil && store.currentID == "default", "opening default switches Current")
+        expect(readJSON(settings)["apiKeyHelper"] == nil && opened.all.last?.hasPrefix("env -u CLAUDE_CONFIG_DIR claude") == true, "default open ignores API settings")
+        _ = store.switchTo("api1")
+        expect(store.open(account) == nil && store.currentID == "acct1", "opening account switches Current")
+        expect(readJSON(settings)["apiKeyHelper"] == nil, "account open restores user settings")
+        expect(store.signIn(account) == nil && store.open(api) == nil && store.currentID == "api1", "opening api switches Current")
+        expect((readJSON(settings)["apiKeyHelper"] as? String)?.contains("api1") == true, "api open applies its helper")
+        opened.removeFirst(1)
         let commands = opened.all
         expect(commands[0].contains("CLAUDE_CONFIG_DIR=") && commands[0].contains("/accounts/acct1") && !commands[0].contains("auth login"), "account launch uses own config dir")
         expect(commands[1].hasSuffix("claude auth login") && commands[1].contains("/accounts/acct1"), "sign in uses own config dir")
@@ -92,5 +99,6 @@ final class OpenedCommands: @unchecked Sendable {
     private let lock = NSLock()
     private var commands: [String] = []
     func add(_ command: String) { lock.lock(); commands.append(command); lock.unlock() }
+    func removeFirst(_ count: Int) { lock.lock(); commands.removeFirst(count); lock.unlock() }
     var all: [String] { lock.lock(); defer { lock.unlock() }; return commands }
 }

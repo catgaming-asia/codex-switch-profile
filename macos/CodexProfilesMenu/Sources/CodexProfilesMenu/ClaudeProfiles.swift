@@ -333,12 +333,15 @@ final class ClaudeProfileStore: ObservableObject {
         return applier.apply(profile.kind == .api ? profile : nil)
     }
 
-    /// Opens Terminal running Claude Code with this profile only.
+    /// Opens Terminal running Claude Code with this profile. A profile that
+    /// isn't current is switched to first, so user settings left by an API
+    /// profile can't leak into an account, and Current matches what opens.
     func open(_ profile: ClaudeProfile) -> String? {
         if let directory = accountDirectory(for: profile) {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                      attributes: [.posixPermissions: 0o700])
         }
+        if profile.id != currentID, let error = switchTo(profile.id) { return error }
         if profile.kind == .api && !isConfigured(profile) { return "This API profile has no saved key or endpoint. Edit it to finish setup." }
         return openTerminal(launcher.command(for: profile))
     }

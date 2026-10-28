@@ -63,7 +63,7 @@ DMG="$OUTPUT_DIR/Codex-Profiles-$VERSION-universal.dmg"
 
 mkdir "$MOUNT_DIR"
 hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT_DIR" "$DMG" >/dev/null
-APP_DIR="$MOUNT_DIR/Codex Profiles.app"
+APP_DIR="$MOUNT_DIR/AI Profile.app"
 [[ -x "$APP_DIR/Contents/MacOS/CodexProfilesMenu" ]]
 [[ -x "$APP_DIR/Contents/Resources/bin/codex-profile" ]]
 [[ -s "$APP_DIR/Contents/Resources/AppIcon.icns" ]]

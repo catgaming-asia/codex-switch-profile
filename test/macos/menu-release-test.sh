@@ -25,8 +25,8 @@ cat > "$FIXTURE_ROOT/scripts/macos/build-menu-app.sh" <<'APP_BUILDER'
 #!/usr/bin/env bash
 set -euo pipefail
 fixture_root="$(cd "$(dirname "$0")/../.." && pwd)"
-mkdir -p "$MENU_APP_BUILD_DIR/Codex Profiles.app/Contents"
-cp "$fixture_root/Info.plist" "$MENU_APP_BUILD_DIR/Codex Profiles.app/Contents/Info.plist"
+mkdir -p "$MENU_APP_BUILD_DIR/AI Profile.app/Contents"
+cp "$fixture_root/Info.plist" "$MENU_APP_BUILD_DIR/AI Profile.app/Contents/Info.plist"
 APP_BUILDER
 chmod 755 "$FIXTURE_ROOT/scripts/macos/build-menu-app.sh"
 

@@ -661,7 +661,7 @@ final class WorkspaceMenuViewController: NSViewController {
         case .enabled: openAtLogin.state = .on
         case .requiresApproval:
             openAtLogin.state = .mixed
-            openAtLogin.toolTip = "Allow Codex Profiles in System Settings › General › Login Items"
+            openAtLogin.toolTip = "Allow AI Profile in System Settings › General › Login Items"
         case .disabled: openAtLogin.state = .off
         }
         menu.addItem(openAtLogin)
@@ -671,7 +671,7 @@ final class WorkspaceMenuViewController: NSViewController {
             let lowQuota = menuItem("Low-quota alerts", #selector(toggleLowQuotaAlerts), symbol: nil, nil)
             if alerts.isBlocked {
                 lowQuota.state = .mixed
-                lowQuota.toolTip = "Notifications are not allowed. Allow Codex Profiles in System Settings › Notifications, or choose this to turn alerts off; turning them on again asks macOS."
+                lowQuota.toolTip = "Notifications are not allowed. Allow AI Profile in System Settings › Notifications, or choose this to turn alerts off; turning them on again asks macOS."
             } else {
                 lowQuota.state = alerts.isEnabled ? .on : .off
                 lowQuota.toolTip = "Notify when a profile’s Codex quota falls to 25%, and again at 10%. Checks usage every 5 minutes; never switches profiles."
@@ -680,12 +680,12 @@ final class WorkspaceMenuViewController: NSViewController {
             menu.addItem(lowQuota)
         }
         menu.addItem(.separator())
-        menu.addItem(menuItem("About Codex Profiles", #selector(showAbout), symbol: nil, nil))
+        menu.addItem(menuItem("About AI Profile", #selector(showAbout), symbol: nil, nil))
         let guardItem = NSMenuItem(title: "Workspace guard: \(store.guardMode)", action: nil, keyEquivalent: "")
         guardItem.isEnabled = false
         menu.addItem(guardItem)
         menu.addItem(.separator())
-        let quit = menuItem("Quit Codex Profiles", #selector(quit), symbol: nil, nil)
+        let quit = menuItem("Quit AI Profile", #selector(quit), symbol: nil, nil)
         quit.keyEquivalent = "q"
         menu.addItem(quit)
         return menu
@@ -835,17 +835,17 @@ final class WorkspaceMenuViewController: NSViewController {
             switch loginItem.status {
             case .enabled:
                 try loginItem.unregister()
-                store.showMessage("Codex Profiles won’t open at login")
+                store.showMessage("AI Profile won’t open at login")
             case .requiresApproval:
                 loginItem.openSystemSettings()
-                store.showMessage("Allow Codex Profiles in Login Items")
+                store.showMessage("Allow AI Profile in Login Items")
             case .disabled:
                 try loginItem.register()
                 if loginItem.status == .requiresApproval {
                     loginItem.openSystemSettings()
-                    store.showMessage("Allow Codex Profiles in Login Items")
+                    store.showMessage("Allow AI Profile in Login Items")
                 } else {
-                    store.showMessage("Codex Profiles will open at login")
+                    store.showMessage("AI Profile will open at login")
                 }
             }
         } catch {
@@ -860,7 +860,7 @@ final class WorkspaceMenuViewController: NSViewController {
             case .enabled: store.showMessage("Low-quota alerts on · usage checked every 5 minutes")
             case .disabled: store.showMessage("Low-quota alerts off")
             case .denied:
-                store.showMessage("Notifications are off for Codex Profiles")
+                store.showMessage("Notifications are off for AI Profile")
                 presentError(QuotaAlertController.permissionDeniedMessage)
             case .busy: break
             }
@@ -1024,7 +1024,7 @@ final class WorkspaceMenuViewController: NSViewController {
         DispatchQueue.main.async { [weak self] in
             let alert = NSAlert()
             alert.alertStyle = .warning
-            alert.messageText = "Codex Profiles couldn’t complete the action"
+            alert.messageText = "AI Profile couldn’t complete the action"
             alert.informativeText = self?.hideProfileNames == true ? "Action failed. Show profile names to see details in the footer, then try again." : message
             alert.addButton(withTitle: "OK")
             alert.runModal()

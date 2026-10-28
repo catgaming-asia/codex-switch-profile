@@ -107,7 +107,7 @@ printf 'Native light and dark preview backdrop checks passed.\n'
 
 MENU_APP_BUILD_DIR="$TMP_DIR/app-build" "$BUILD_SCRIPT"
 
-APP_DIR="$TMP_DIR/app-build/Codex Profiles.app"
+APP_DIR="$TMP_DIR/app-build/AI Profile.app"
 [[ -x "$APP_DIR/Contents/MacOS/CodexProfilesMenu" ]]
 [[ -x "$APP_DIR/Contents/Resources/bin/codex-profile" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :LSUIElement' "$APP_DIR/Contents/Info.plist")" == "true" ]]

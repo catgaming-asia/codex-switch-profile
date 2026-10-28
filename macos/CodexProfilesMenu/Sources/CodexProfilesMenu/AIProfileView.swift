@@ -317,6 +317,7 @@ final class AIProfileViewController: NSViewController {
     private let scroll = NSScrollView()
     private let stack = NSStackView()
     private var scrollHeight: NSLayoutConstraint?
+    private var scrollWidth: NSLayoutConstraint?
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
 
     init(codex: WorkspaceMenuViewController, store: WorkspaceStore, settings: AIProfileSettings, claude: ClaudeUsageStore,
@@ -352,10 +353,11 @@ final class AIProfileViewController: NSViewController {
         })
         addChild(codex)
         stack.orientation = .vertical
-        stack.alignment = .leading
+        stack.alignment = .width
         stack.spacing = 0
         for subview in [section, divider(), codex.view, divider(), claudeSection] { stack.addArrangedSubview(subview) }
         let document = FlippedView()
+        document.translatesAutoresizingMaskIntoConstraints = false
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
         scroll.documentView = document
@@ -365,19 +367,26 @@ final class AIProfileViewController: NSViewController {
         scroll.translatesAutoresizingMaskIntoConstraints = false
         root.addSubview(scroll)
         scrollHeight = scroll.heightAnchor.constraint(equalToConstant: 480)
+        scrollWidth = scroll.widthAnchor.constraint(equalToConstant: 400)
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: root.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
-            scroll.widthAnchor.constraint(equalToConstant: 400),
+            scrollWidth!,
             scrollHeight!,
             stack.topAnchor.constraint(equalTo: document.topAnchor),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor),
             stack.trailingAnchor.constraint(equalTo: document.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
+            document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor),
             document.widthAnchor.constraint(equalToConstant: 400),
         ])
+        // The clip view narrows when a legacy scroller appears after layout.
+        scroll.contentView.postsFrameChangedNotifications = true
+        NotificationCenter.default.publisher(for: NSView.frameDidChangeNotification, object: scroll.contentView)
+            .sink { [weak self] _ in Task { @MainActor in self?.fitHeight() } }.store(in: &subscriptions)
         codex.onPreferredContentSizeChange = { [weak self] _ in self?.relayout() }
         let previousChange = codexStore.onChange
         codexStore.onChange = { [weak self] in previousChange?(); self?.refreshCurrent() }
@@ -402,12 +411,29 @@ final class AIProfileViewController: NSViewController {
         Task { @MainActor in self.relayout() }
     }
 
+    /// SwiftUI sections grow after quota loads or an editor opens; following
+    /// each layout pass keeps the viewport matched to the document.
+    override func viewDidLayout() {
+        super.viewDidLayout()
+        fitHeight()
+    }
+
     func relayout() {
         view.layoutSubtreeIfNeeded()
-        let height = min(maxHeight, stack.fittingSize.height)
-        scrollHeight?.constant = height
-        preferredContentSize = NSSize(width: 400, height: height)
-        onPreferredContentSizeChange?(preferredContentSize)
+        fitHeight()
+    }
+
+    /// Sections are 400 points wide; widen the scroll view by whatever a legacy
+    /// scroller takes from the clip view instead of cropping them.
+    private func fitHeight() {
+        let clip = scroll.contentView.bounds.width
+        let width = (scrollWidth?.constant ?? 400) + (clip > 0 ? max(0, 400 - clip) : 0)
+        let size = NSSize(width: width, height: min(maxHeight, stack.fittingSize.height))
+        guard size != preferredContentSize else { return }
+        scrollWidth?.constant = size.width
+        scrollHeight?.constant = size.height
+        preferredContentSize = size
+        onPreferredContentSizeChange?(size)
     }
 
     func focusMenu() { codex.focusMenu() }

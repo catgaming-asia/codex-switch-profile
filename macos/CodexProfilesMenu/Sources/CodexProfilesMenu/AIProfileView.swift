@@ -154,15 +154,15 @@ final class AIProfileViewController: NSViewController {
             claudePane.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             claudePane.heightAnchor.constraint(equalToConstant: claudeHeight),
         ])
-        codex.onPreferredContentSizeChange = { [weak self] _ in self?.applyTab() }
-        settings.$tab.dropFirst().sink { [weak self] _ in self?.applyTab() }.store(in: &subscriptions)
-        applyTab()
+        codex.onPreferredContentSizeChange = { [weak self] _ in self?.applyTab(self?.settings.tab ?? .codex) }
+        // $tab fires in willSet, so use the published value, not settings.tab.
+        settings.$tab.dropFirst().sink { [weak self] tab in self?.applyTab(tab) }.store(in: &subscriptions)
+        applyTab(settings.tab)
     }
 
     private var subscriptions: Set<AnyCancellable> = []
 
-    private func applyTab() {
-        let tab = settings.tab
+    private func applyTab(_ tab: PopupTab) {
         codex.view.isHidden = tab != .codex
         claudeView?.isHidden = tab != .claude
         preferredContentSize = size(forTab: tab)

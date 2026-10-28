@@ -209,8 +209,15 @@ final class ClaudeUsageStore: ObservableObject {
     var onChange: (() -> Void)?
     private var client: ClaudeUsageClient
     private var lastAttempt: Date?
+    /// Bumped by `select`; a reading that finishes under an older value is dropped.
+    private var generation = 0
+    private let fetch: @Sendable (ClaudeUsageClient) async -> ClaudeUsageState
 
-    init(client: ClaudeUsageClient = ClaudeUsageClient()) { self.client = client }
+    init(client: ClaudeUsageClient = ClaudeUsageClient(),
+         fetch: @escaping @Sendable (ClaudeUsageClient) async -> ClaudeUsageState = { await $0.fetch() }) {
+        self.client = client
+        self.fetch = fetch
+    }
 
     /// Follows the current Claude profile's account; its reading replaces the old one.
     func select(configDirectory: URL?) {
@@ -218,6 +225,8 @@ final class ClaudeUsageStore: ObservableObject {
         client.configDirectory = configDirectory
         state = .loading
         lastAttempt = nil
+        generation += 1
+        isRefreshing = false
     }
 
     func refresh(force: Bool = false) async {
@@ -225,7 +234,9 @@ final class ClaudeUsageStore: ObservableObject {
         if !force, let lastAttempt, Date().timeIntervalSince(lastAttempt) < 60 { return }
         isRefreshing = true
         lastAttempt = Date()
-        let result = await client.fetch()
+        let started = generation
+        let result = await fetch(client)
+        guard started == generation else { return }
         isRefreshing = false
         state = result
         onChange?()

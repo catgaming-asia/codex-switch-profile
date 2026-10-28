@@ -3,7 +3,7 @@ import Foundation
 @main
 @MainActor
 struct ClaudeUsageTests {
-    static func main() {
+    static func main() async {
         let client = ClaudeUsageClient()
         let usage = Data("""
         {"five_hour":{"utilization":24.0,"resets_at":"2030-01-01T10:00:00.500+00:00"},
@@ -41,10 +41,36 @@ struct ClaudeUsageTests {
         expect(low.menuBarLevel(at: now) == .critical, "claude level from claude windows")
         expect(ClaudeSnapshot(account: account, windows: [], checkedAt: now).menuBarLevel(at: now) == .normal, "no windows neutral")
         ClaudeProfileSmoke().run()
+        // A reading started before select must not overwrite the newly selected account.
+        let gate = ReadingGate()
+        let oldDirectory = URL(fileURLWithPath: "/tmp/claude-race-old")
+        let newDirectory = URL(fileURLWithPath: "/tmp/claude-race-new")
+        let racing = ClaudeUsageStore(client: ClaudeUsageClient(configDirectory: oldDirectory)) { client in
+            if client.configDirectory == oldDirectory { await gate.wait(); return .unavailable(.network) }
+            return .unavailable(.rateLimited)
+        }
+        let stale = Task { await racing.refresh(force: true) }
+        while !gate.isWaiting { try? await Task.sleep(nanoseconds: 1_000_000) }
+        racing.select(configDirectory: newDirectory)
+        await racing.refresh()
+        expect(racing.state == .unavailable(.rateLimited) && !racing.isRefreshing, "new profile refreshes right after select")
+        gate.open()
+        await stale.value
+        expect(racing.state == .unavailable(.rateLimited) && !racing.isRefreshing, "stale reading is dropped")
         print("Claude usage smoke tests passed.")
     }
 
     private static func expect(_ condition: Bool, _ message: String) {
         guard condition else { fatalError("Failed: \(message)") }
     }
+}
+
+final class ReadingGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<Void, Never>?
+    var isWaiting: Bool { lock.lock(); defer { lock.unlock() }; return continuation != nil }
+    func wait() async {
+        await withCheckedContinuation { next in lock.lock(); continuation = next; lock.unlock() }
+    }
+    func open() { lock.lock(); let next = continuation; continuation = nil; lock.unlock(); next?.resume() }
 }

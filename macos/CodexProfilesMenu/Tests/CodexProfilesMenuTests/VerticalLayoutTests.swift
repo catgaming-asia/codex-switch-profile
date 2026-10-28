@@ -53,6 +53,18 @@ struct VerticalLayoutTests {
         settings.claudeProfilesExpanded = true
         await settle(controller)
         let entry = check("entry", controller)
+        // One common scroll view: the Codex list is laid out at its full height, with no scroller or 500-point cap of its own.
+        let scrolls = descendants(controller.view).compactMap { $0 as? NSScrollView }
+        expect(scrolls.count == 1, "the panel must have a single scroll view, found \(scrolls.count)")
+        let expanded = sectionHeights(controller)
+        let rows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
+        expect(rows.count == 8 && expanded[1] > 500, "all eight Codex rows must be laid out in full, section height \(expanded[1])")
+        let document = scrolls[0].documentView!
+        let lastRow = rows.last!.convert(rows.last!.bounds, to: document)
+        expect(lastRow.maxY <= document.frame.height + 0.5 && lastRow.height > 20, "the last Codex row must lie inside the common document")
+        scrolls[0].contentView.scroll(to: NSPoint(x: 0, y: max(0, lastRow.maxY - scrolls[0].contentView.bounds.height)))
+        expect(scrolls[0].contentView.bounds.maxY >= lastRow.maxY - 0.5, "the last Codex row must be reachable with the common scroller")
+        scrolls[0].contentView.scroll(to: .zero)
         await claude.refresh(force: true)
         await settle(controller)
         let loaded = check("quota loaded", controller)

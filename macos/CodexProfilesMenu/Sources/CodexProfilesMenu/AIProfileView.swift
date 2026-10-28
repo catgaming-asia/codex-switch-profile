@@ -450,6 +450,7 @@ final class AIProfileViewController: NSViewController {
             guard let self, profile.kind == .account else { return nil }
             return self.claudeAccount(in: self.profiles.accountDirectory(for: profile))
         })
+        codex.embedsInCommonScroll = true
         codex.isCollapsed = !settings.codexProfilesExpanded
         codex.onCollapseChange = { [weak self] collapsed in self?.settings.codexProfilesExpanded = !collapsed }
         addChild(codex)

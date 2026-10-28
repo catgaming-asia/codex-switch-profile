@@ -17,6 +17,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Fixed
 
+- The macOS menu's In use, Codex profiles and Claude profiles sections now share one vertical scroll area. The Codex list no longer scrolls separately inside a 500-point box, so the mouse wheel works over the whole panel.
 - The macOS menu's **Switch** and ChatGPT launches now use the Desktop bundle that is running when both ChatGPT.app and Codex.app are installed. Previously a stale ChatGPT.app was chosen first, so the running app was never quit or reopened. An explicit `CHATGPT_APP`, `CODEX_APP` or `CODEX_APP_BIN` still takes priority, and the first installed app is used when none is running.
 - Command-V, Command-C, Command-X, Command-A and Undo/Redo now work in the macOS menu's text fields, such as the Claude profile form. The menu-bar app had no Edit menu to carry those shortcuts, so only right-click Paste worked.
 

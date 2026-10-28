@@ -44,6 +44,16 @@ final class WorkspaceMenuViewController: NSViewController {
     private let autoSwitchButton = NSButton(checkboxWithTitle: "Auto", target: nil, action: nil)
     private var rows: [LaunchRowButton] = []
     private var scrollView: NSScrollView?
+    private var listDocument: NSView?
+    /// The vertical AI Profile panel owns the only scroll view. Embedded, the list
+    /// is laid out at its full height with no scroller of its own and no 500-point cap.
+    var embedsInCommonScroll = false {
+        didSet {
+            guard oldValue != embedsInCommonScroll, isViewLoaded else { return }
+            renderedList = nil
+            render()
+        }
+    }
     private var selectedID: LaunchTarget.ID?
     private var heightConstraint: NSLayoutConstraint?
     private var toolbarHeightConstraint: NSLayoutConstraint?
@@ -302,7 +312,7 @@ final class WorkspaceMenuViewController: NSViewController {
         updateProfilePicker()
 
         let list = !showingInfo && store.phase == .ready && !targets.isEmpty ? listModel(for: targets) : nil
-        if let list, list == renderedList, scrollView != nil {
+        if let list, list == renderedList, listDocument != nil {
             for row in rows {
                 row.isSelectedRow = row.item.id == selectedID
                 if row.item.workspace == nil { row.update(usage: store.usageState(for: row.item.profile)) }
@@ -314,6 +324,7 @@ final class WorkspaceMenuViewController: NSViewController {
         contentContainer.subviews.forEach { $0.removeFromSuperview() }
         rows.removeAll()
         scrollView = nil
+        listDocument = nil
         switch store.phase {
         case .idle, .loading:
             showState(symbol: "terminal", title: "Loading your profiles", detail: "Reading local profiles and bindings…", progress: true)
@@ -328,12 +339,13 @@ final class WorkspaceMenuViewController: NSViewController {
         case .ready:
             if let list { showLaunchList(list) }
         }
-        let contentHeight = scrollView?.documentView?.fittingSize.height
+        let contentHeight = listDocument?.fittingSize.height
             ?? contentContainer.subviews.first.map { $0.fittingSize.height + 24 } ?? 100
         // Header, filter, separators and footer occupy 126 points; the info page omits the filter.
         let fixedHeight: CGFloat = showingInfo ? 102 : 126
         // Collapsed: the 44-point header, its separator and the 1-point body separator.
-        let height: CGFloat = collapsed ? 46 : populated ? min(500, max(showingInfo ? 300 : 260, fixedHeight + contentHeight)) : 260
+        let natural = max(showingInfo ? 300 : 260, fixedHeight + contentHeight)
+        let height: CGFloat = collapsed ? 46 : populated ? (embedsInCommonScroll ? natural : min(500, natural)) : 260
         heightConstraint?.constant = height
         preferredContentSize = NSSize(width: 400, height: height)
         onPreferredContentSizeChange?(preferredContentSize)
@@ -381,11 +393,6 @@ final class WorkspaceMenuViewController: NSViewController {
     }
 
     private func showLaunchList(_ list: ListModel) {
-        let scroll = NSScrollView()
-        scroll.hasVerticalScroller = true
-        scroll.autohidesScrollers = true
-        scroll.drawsBackground = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
         let document = FlippedView()
         document.translatesAutoresizingMaskIntoConstraints = false
         let stack = NSStackView()
@@ -444,14 +451,29 @@ final class WorkspaceMenuViewController: NSViewController {
                 separator.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
             }
         }
-        scroll.documentView = document
-        scrollView = scroll
-        contentContainer.addSubview(scroll)
+        listDocument = document
+        let host: NSView
+        if embedsInCommonScroll {
+            contentContainer.addSubview(document)
+            host = contentContainer
+        } else {
+            let scroll = NSScrollView()
+            scroll.hasVerticalScroller = true
+            scroll.autohidesScrollers = true
+            scroll.drawsBackground = false
+            scroll.translatesAutoresizingMaskIntoConstraints = false
+            scroll.documentView = document
+            scrollView = scroll
+            contentContainer.addSubview(scroll)
+            NSLayoutConstraint.activate([
+                scroll.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
+                scroll.topAnchor.constraint(equalTo: contentContainer.topAnchor), scroll.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
+            ])
+            host = scroll.contentView
+        }
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: contentContainer.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: contentContainer.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: contentContainer.topAnchor), scroll.bottomAnchor.constraint(equalTo: contentContainer.bottomAnchor),
-            document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            document.leadingAnchor.constraint(equalTo: scroll.contentView.leadingAnchor), document.topAnchor.constraint(equalTo: scroll.contentView.topAnchor),
+            document.leadingAnchor.constraint(equalTo: host.leadingAnchor), document.topAnchor.constraint(equalTo: host.topAnchor),
+            document.widthAnchor.constraint(equalTo: host.widthAnchor),
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor), stack.trailingAnchor.constraint(equalTo: document.trailingAnchor),
             stack.topAnchor.constraint(equalTo: document.topAnchor), stack.bottomAnchor.constraint(equalTo: document.bottomAnchor),
         ])

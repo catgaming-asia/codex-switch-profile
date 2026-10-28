@@ -82,6 +82,7 @@ private struct CodexCurrentBlock: View {
 private struct ClaudeCurrentBlock: View {
     @ObservedObject var store: ClaudeUsageStore
     @ObservedObject var settings: AIProfileSettings
+    @ObservedObject var profiles: ClaudeProfileStore
 
     var body: some View {
         let now = Date()
@@ -93,6 +94,13 @@ private struct ClaudeCurrentBlock: View {
                     .toggleStyle(.checkbox).font(.system(size: 11))
                     .help("Show Claude quota and icon in the menu bar")
             }
+            let profile = profiles.current
+            Text(profile.name).font(.system(size: 12, weight: .medium))
+            if profile.kind == .api {
+                Text(profile.baseURL ?? "No endpoint").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(profile.model.map { "Model \($0)" } ?? "Model: Claude Code default").font(.system(size: 11)).foregroundStyle(.secondary)
+                Text("API billing has no subscription quota to show.").font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
             switch store.state {
             case .loading:
                 HStack(spacing: 8) {
@@ -110,6 +118,7 @@ private struct ClaudeCurrentBlock: View {
                 Text("Subscription quota, not token cost. Checked \(UsageFormat.clock(snapshot.checkedAt, relativeTo: now)).")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
+            }
         }
     }
 }
@@ -118,6 +127,7 @@ private struct CurrentSection: View {
     @ObservedObject var codex: CodexCurrentModel
     @ObservedObject var claude: ClaudeUsageStore
     @ObservedObject var settings: AIProfileSettings
+    @ObservedObject var profiles: ClaudeProfileStore
     let refresh: () -> Void
 
     var body: some View {
@@ -131,7 +141,160 @@ private struct CurrentSection: View {
             }
             CodexCurrentBlock(model: codex, settings: settings)
             Divider()
-            ClaudeCurrentBlock(store: claude, settings: settings)
+            ClaudeCurrentBlock(store: claude, settings: settings, profiles: profiles)
+        }
+        .padding(14)
+        .frame(width: 400, alignment: .topLeading)
+    }
+}
+
+private struct ClaudeProfileRow: View {
+    let profile: ClaudeProfile
+    @ObservedObject var store: ClaudeProfileStore
+    let accountEmail: String?
+    let edit: () -> Void
+    let report: (String?) -> Void
+    @State private var confirmingDelete = false
+
+    private var status: String {
+        if profile.kind == .api { return store.isConfigured(profile) ? "Configured" : "Needs setup" }
+        return accountEmail ?? "Not signed in"
+    }
+
+    var body: some View {
+        let isCurrent = store.currentID == profile.id
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Image(systemName: profile.kind == .api ? "key" : "person.crop.circle").frame(width: 16)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(profile.name).font(.system(size: 12, weight: .medium))
+                    Text(profile.kind == .api ? "\(profile.baseURL ?? "") · \(profile.model ?? "default model") · \(status)" : status)
+                        .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+                Spacer()
+                if isCurrent {
+                    Text("Current").font(.system(size: 11, weight: .semibold)).foregroundStyle(.green)
+                } else {
+                    Button("Switch") { report(store.switchTo(profile.id)) }.controlSize(.small)
+                }
+                Menu {
+                    Button("Open in Terminal") { report(store.open(profile)) }
+                    if profile.kind == .account && !profile.isDefaultAccount {
+                        Button("Sign in…") { report(store.signIn(profile)) }
+                    }
+                    if !profile.isDefaultAccount {
+                        Button("Edit…", action: edit)
+                        Button("Delete…", role: .destructive) { confirmingDelete = true }
+                    }
+                } label: { Image(systemName: "ellipsis.circle") }
+                .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+                .accessibilityLabel("Actions for \(profile.name)")
+            }
+            if confirmingDelete {
+                HStack {
+                    Text(profile.kind == .api ? "Delete this profile and its saved API key?" : "Delete this profile and its sign-in folder?")
+                        .font(.system(size: 11))
+                    Spacer()
+                    Button("Cancel") { confirmingDelete = false }.controlSize(.small)
+                    Button("Delete", role: .destructive) { confirmingDelete = false; report(store.remove(profile.id)) }.controlSize(.small)
+                }
+            }
+        }
+    }
+}
+
+private struct ClaudeProfileForm: View {
+    @ObservedObject var store: ClaudeProfileStore
+    let editing: ClaudeProfile?
+    let done: () -> Void
+    @State private var name = ""
+    @State private var kind = ClaudeProfileKind.account
+    @State private var baseURL = "https://api.anthropic.com"
+    @State private var model = ""
+    @State private var apiKey = ""
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(editing == nil ? "New Claude profile" : "Edit Claude profile").font(.system(size: 12, weight: .semibold))
+            TextField("Name", text: $name)
+            if editing == nil {
+                Picker("Type", selection: $kind) {
+                    Text("Claude Code account").tag(ClaudeProfileKind.account)
+                    Text("API").tag(ClaudeProfileKind.api)
+                }
+                .pickerStyle(.segmented)
+            }
+            if kind == .api {
+                TextField("Endpoint (base URL)", text: $baseURL)
+                TextField("Model (optional)", text: $model)
+                SecureField(editing == nil ? "API key" : "API key (leave empty to keep the saved key)", text: $apiKey)
+                Text("The key is stored in Keychain only.").font(.system(size: 11)).foregroundStyle(.secondary)
+            } else {
+                Text("Save, then choose Sign in… to log in to this account in its own Claude Code folder.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+            if let error { Text(error).font(.system(size: 11)).foregroundStyle(.red) }
+            HStack {
+                Spacer()
+                Button("Cancel", action: done)
+                Button(editing == nil ? "Add" : "Save", action: save).keyboardShortcut(.defaultAction)
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .font(.system(size: 12))
+        .onAppear {
+            guard let editing else { return }
+            name = editing.name
+            kind = editing.kind
+            baseURL = editing.baseURL ?? ""
+            model = editing.model ?? ""
+        }
+    }
+
+    private func save() {
+        error = store.validate(name: name, kind: kind, baseURL: baseURL, apiKey: apiKey, editing: editing)
+        guard error == nil else { return }
+        let profile = ClaudeProfile(id: editing?.id ?? store.newProfileID(), name: name, kind: kind,
+                                    baseURL: kind == .api ? baseURL : nil, model: kind == .api ? model : nil)
+        error = store.upsert(profile, apiKey: apiKey)
+        if error == nil { apiKey = ""; done() }
+    }
+}
+
+private struct ClaudeProfilesSection: View {
+    @ObservedObject var store: ClaudeProfileStore
+    let emails: (ClaudeProfile) -> String?
+    @State private var editorOpen = false
+    @State private var editing: ClaudeProfile?
+    @State private var error: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SectionHeader(title: "Claude profiles")
+                Spacer()
+                Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus") }
+                    .buttonStyle(.borderless).font(.system(size: 12))
+            }
+            if editorOpen {
+                ClaudeProfileForm(store: store, editing: editing) { editorOpen = false }
+                    .id(editing?.id ?? "new")
+            } else {
+                ForEach(store.profiles) { profile in
+                    ClaudeProfileRow(profile: profile, store: store, accountEmail: emails(profile),
+                                     edit: { editing = profile; editorOpen = true }) { error = $0 }
+                }
+            }
+            if let error {
+                HStack(alignment: .top) {
+                    Text(error).font(.system(size: 11)).foregroundStyle(.red)
+                    Spacer()
+                    Button("Dismiss") { self.error = nil }.buttonStyle(.borderless).font(.system(size: 11))
+                }
+            }
+            Text("Switching changes new Claude Code sessions only. Running sessions and Claude Desktop are unchanged. Account profiles other than Default apply through Open in Terminal.")
+                .font(.system(size: 11)).foregroundStyle(.secondary)
         }
         .padding(14)
         .frame(width: 400, alignment: .topLeading)
@@ -147,6 +310,8 @@ final class AIProfileViewController: NSViewController {
     private let codexStore: WorkspaceStore
     private let settings: AIProfileSettings
     private let claude: ClaudeUsageStore
+    private let profiles: ClaudeProfileStore
+    private var subscriptions: Set<AnyCancellable> = []
     private let current = CodexCurrentModel()
     private let maxHeight: CGFloat = 560
     private let scroll = NSScrollView()
@@ -154,7 +319,9 @@ final class AIProfileViewController: NSViewController {
     private var scrollHeight: NSLayoutConstraint?
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
 
-    init(codex: WorkspaceMenuViewController, store: WorkspaceStore, settings: AIProfileSettings, claude: ClaudeUsageStore) {
+    init(codex: WorkspaceMenuViewController, store: WorkspaceStore, settings: AIProfileSettings, claude: ClaudeUsageStore,
+         profiles: ClaudeProfileStore) {
+        self.profiles = profiles
         self.codex = codex
         codexStore = store
         self.settings = settings
@@ -175,15 +342,19 @@ final class AIProfileViewController: NSViewController {
     override func loadView() {
         let root = NSView()
         view = root
-        let section = NSHostingView(rootView: CurrentSection(codex: current, claude: claude, settings: settings) { [weak self] in
+        let section = NSHostingView(rootView: CurrentSection(codex: current, claude: claude, settings: settings, profiles: profiles) { [weak self] in
             guard let self else { return }
             Task { await self.claude.refresh(force: true) }
+        })
+        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles) { [weak self] profile in
+            guard let self, profile.kind == .account else { return nil }
+            return self.claudeEmail(in: self.profiles.accountDirectory(for: profile))
         })
         addChild(codex)
         stack.orientation = .vertical
         stack.alignment = .leading
         stack.spacing = 0
-        for subview in [section, divider(), codex.view] { stack.addArrangedSubview(subview) }
+        for subview in [section, divider(), codex.view, divider(), claudeSection] { stack.addArrangedSubview(subview) }
         let document = FlippedView()
         stack.translatesAutoresizingMaskIntoConstraints = false
         document.addSubview(stack)
@@ -212,8 +383,16 @@ final class AIProfileViewController: NSViewController {
         codexStore.onChange = { [weak self] in previousChange?(); self?.refreshCurrent() }
         let previousUsage = codexStore.onStatusUsageChange
         codexStore.onStatusUsageChange = { [weak self] in previousUsage?(); self?.refreshCurrent() }
+        profiles.objectWillChange.sink { [weak self] in Task { @MainActor in self?.relayout() } }.store(in: &subscriptions)
         refreshCurrent()
         relayout()
+    }
+
+    /// The signed-in email recorded in a profile's own Claude Code folder.
+    private func claudeEmail(in directory: URL?) -> String? {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let data = try? Data(contentsOf: directory?.appendingPathComponent(".claude.json") ?? home.appendingPathComponent(".claude.json"))
+        return ClaudeUsageClient().parseAccount(data, plan: nil).email
     }
 
     /// Mirrors the store's active Codex profile and its default-home reading.

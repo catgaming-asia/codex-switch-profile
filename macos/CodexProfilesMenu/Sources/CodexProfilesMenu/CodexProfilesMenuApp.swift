@@ -23,6 +23,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private lazy var alerts = QuotaAlertController(store: store, notifier: notifier)
     private let settings = AIProfileSettings()
     private let claudeStore = ClaudeUsageStore()
+    private lazy var claudeProfiles: ClaudeProfileStore = {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return ClaudeProfileStore(directory: support.appendingPathComponent("AI Profile/claude"),
+                                  claudeDirectory: home.appendingPathComponent(".claude"))
+    }()
     private var menuController: AIProfileViewController?
     private var eventMonitor: Any?
     private var statusRefreshTask: Task<Void, Never>?
@@ -35,7 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
         }
-        let controller = AIProfileViewController(codex: codexController, store: store, settings: settings, claude: claudeStore)
+        let controller = AIProfileViewController(codex: codexController, store: store, settings: settings, claude: claudeStore,
+                                              profiles: claudeProfiles)
         controller.onPreferredContentSizeChange = { [weak self] size in
             self?.popover.contentSize = size
         }
@@ -48,6 +55,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
             self.menuController?.refreshCurrent()
+        }
+        claudeStore.select(configDirectory: claudeProfiles.accountDirectory(for: claudeProfiles.current))
+        claudeProfiles.onCurrentChange = { [weak self] in
+            guard let self else { return }
+            self.claudeStore.select(configDirectory: self.claudeProfiles.accountDirectory(for: self.claudeProfiles.current))
+            self.updateStatusItem(self.alerts.indicator)
+            Task { await self.claudeStore.refresh() }
         }
         menuController = controller
 
@@ -153,7 +167,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if let button = claudeStatusItem?.button {
             var snapshot: ClaudeSnapshot?
-            if case let .available(value) = claudeStore.state { snapshot = value }
+            if case let .available(value) = claudeStore.state, claudeProfiles.current.kind == .account { snapshot = value }
             apply(to: claudeStatusItem, button: button, level: snapshot?.menuBarLevel(at: now) ?? .normal,
                   symbolName: StatusItemIcon.claudeSymbolName, quota: snapshot?.menuBarText(at: now),
                   label: namesHidden ? "AI profile" : "AI Profile (Claude)",

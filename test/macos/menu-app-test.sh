@@ -99,6 +99,18 @@ swiftc \
   -parse-as-library \
   -framework AppKit \
   "$APP_SOURCE_DIR"/*.swift \
+  "$APP_PROJECT_DIR/Tests/CodexProfilesMenuTests/ClaudeUsageTests.swift" \
+  "$APP_PROJECT_DIR/Tests/CodexProfilesMenuTests/ClaudeProfileTests.swift" \
+  -o "$TMP_DIR/ClaudeUsageTests"
+HOME="$TMP_DIR/home" "$TMP_DIR/ClaudeUsageTests"
+
+swiftc \
+  -module-cache-path "$TMP_DIR/module-cache" \
+  -target "$SWIFT_TARGET" \
+  -DTESTING \
+  -parse-as-library \
+  -framework AppKit \
+  "$APP_SOURCE_DIR"/*.swift \
   "$APP_PROJECT_DIR/Previews/RenderPreview.swift" \
   -o "$TMP_DIR/RenderPreview"
 "$TMP_DIR/RenderPreview" "$TMP_DIR/menu-light.png"

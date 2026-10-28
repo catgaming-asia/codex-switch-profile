@@ -40,6 +40,7 @@ struct ClaudeUsageTests {
         let low = ClaudeSnapshot(account: account, windows: [ClaudeQuotaWindow(id: "five_hour", title: "5h", shortLabel: "5h", usedPercent: 95, resetsAt: now.addingTimeInterval(600))], checkedAt: now)
         expect(low.menuBarLevel(at: now) == .critical, "claude level from claude windows")
         expect(ClaudeSnapshot(account: account, windows: [], checkedAt: now).menuBarLevel(at: now) == .normal, "no windows neutral")
+        ClaudeProfileSmoke().run()
         print("Claude usage smoke tests passed.")
     }
 

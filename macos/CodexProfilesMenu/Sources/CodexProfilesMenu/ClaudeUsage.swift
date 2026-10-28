@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// One Claude subscription quota window (5-hour session, weekly, …) as
@@ -99,6 +100,8 @@ struct ClaudeCredential: Sendable {
 struct ClaudeUsageClient: Sendable {
     var session: URLSession = .shared
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    /// A profile's private `CLAUDE_CONFIG_DIR`; nil reads the default `~/.claude` account.
+    var configDirectory: URL?
     var usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 
     func parseCredential(_ data: Data) -> ClaudeCredential? {
@@ -132,11 +135,16 @@ struct ClaudeUsageClient: Sendable {
 
     func fetch(now: Date = Date()) async -> ClaudeUsageState {
         let home = homeDirectory
+        let custom = configDirectory
         let loaded = await Task.detached(priority: .utility) { () -> (ClaudeCredential?, Data?) in
-            let keychain = runCapturing("/usr/bin/security", ["find-generic-password", "-s", "Claude Code-credentials", "-w"])
-            let file = try? Data(contentsOf: home.appendingPathComponent(".claude/.credentials.json"))
+            // Claude Code suffixes the Keychain service with a hash of a custom config directory.
+            let service = custom.map { "Claude Code-credentials-" + SHA256.hash(data: Data($0.path.utf8)).map { String(format: "%02x", $0) }.joined().prefix(8) }
+                ?? "Claude Code-credentials"
+            let keychain = runCapturing("/usr/bin/security", ["find-generic-password", "-s", service, "-w"])
+            let file = try? Data(contentsOf: (custom ?? home.appendingPathComponent(".claude")).appendingPathComponent(".credentials.json"))
             let credential = (keychain.flatMap { parseCredential($0) }) ?? (file.flatMap { parseCredential($0) })
-            return (credential, try? Data(contentsOf: home.appendingPathComponent(".claude.json")))
+            let accountFile = custom?.appendingPathComponent(".claude.json") ?? home.appendingPathComponent(".claude.json")
+            return (credential, try? Data(contentsOf: accountFile))
         }.value
         guard let credential = loaded.0 else { return .unavailable(.notSignedIn) }
         if let expiresAt = credential.expiresAt, expiresAt <= now { return .unavailable(.signInExpired) }
@@ -199,10 +207,18 @@ final class ClaudeUsageStore: ObservableObject {
     @Published private(set) var state: ClaudeUsageState = .loading
     @Published private(set) var isRefreshing = false
     var onChange: (() -> Void)?
-    private let client: ClaudeUsageClient
+    private var client: ClaudeUsageClient
     private var lastAttempt: Date?
 
     init(client: ClaudeUsageClient = ClaudeUsageClient()) { self.client = client }
+
+    /// Follows the current Claude profile's account; its reading replaces the old one.
+    func select(configDirectory: URL?) {
+        guard client.configDirectory != configDirectory else { return }
+        client.configDirectory = configDirectory
+        state = .loading
+        lastAttempt = nil
+    }
 
     func refresh(force: Bool = false) async {
         guard !isRefreshing else { return }

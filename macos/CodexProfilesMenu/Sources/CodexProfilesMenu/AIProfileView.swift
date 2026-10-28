@@ -335,10 +335,10 @@ private struct ClaudeProfilesSection: View {
     @State private var editing: ClaudeProfile?
     @State private var error: String?
 
-    /// Plan comes only from the usage reading, which covers the default `~/.claude` account.
+    /// Plan comes only from the usage reading, which belongs to the current account profile.
     private func info(for profile: ClaudeProfile) -> ClaudeAccount? {
         guard profile.kind == .account, let account = accounts(profile) else { return nil }
-        guard profile.isDefaultAccount, case let .available(snapshot) = usage.state else { return account }
+        guard profile.id == store.currentID, store.current.kind == .account, case let .available(snapshot) = usage.state else { return account }
         return ClaudeAccount(email: account.email, organization: account.organization, plan: snapshot.account.plan)
     }
 

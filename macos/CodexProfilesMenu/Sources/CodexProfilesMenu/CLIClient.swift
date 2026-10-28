@@ -27,13 +27,14 @@ struct CommandResult: Equatable {
 }
 
 struct ProcessRunner {
-    func run(executableURL: URL, arguments: [String]) async throws -> CommandResult {
+    func run(executableURL: URL, arguments: [String], environment: [String: String]? = nil) async throws -> CommandResult {
         let process = Process()
         let standardOutput = Pipe()
         let standardError = Pipe()
 
         process.executableURL = executableURL
         process.arguments = arguments
+        if let environment { process.environment = environment }
         // Profile-only launches must not inherit a project binding from the
         // directory where the menu app happened to start.
         process.currentDirectoryURL = FileManager.default.homeDirectoryForCurrentUser
@@ -203,15 +204,19 @@ struct CLIClient: Sendable {
         }.value
     }
 
-    func launch(_ target: LaunchTarget, in destination: OpenDestination) async throws {
+    /// ChatGPT launches pass the chosen Desktop bundle to the CLI as `CHATGPT_APP`, so a
+    /// machine with both ChatGPT.app and Codex.app opens the one in use, not the first installed.
+    func launch(_ target: LaunchTarget, in destination: OpenDestination, appURL: URL? = nil) async throws {
         guard Self.isValidProfileName(target.profile) else { throw CLIClientError.invalidProfileName }
         let executableURL = try requiredExecutableURL()
         try await Task.detached(priority: .userInitiated) {
             switch destination {
             case .chatGPT:
+                let app = appURL ?? DesktopAppLocator().selectedApp()
                 let result = try await ProcessRunner().run(
                     executableURL: executableURL,
-                    arguments: ["app", target.profile] + (target.workspace.map { [$0.path] } ?? [])
+                    arguments: ["app", target.profile] + (target.workspace.map { [$0.path] } ?? []),
+                    environment: app.map { ProcessInfo.processInfo.environment.merging(["CHATGPT_APP": $0.path]) { _, new in new } }
                 )
                 guard result.terminationStatus == 0 else {
                     throw CLIClientError.commandFailed(Self.errorMessage(from: result))

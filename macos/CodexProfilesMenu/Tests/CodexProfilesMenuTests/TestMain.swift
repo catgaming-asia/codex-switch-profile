@@ -22,6 +22,7 @@ struct CodexProfilesMenuTests {
         try await testCreatesAndBindsWithRealCLI()
         try await testErrorsRemainActionable()
         try await testTerminalCommandsPreserveArguments()
+        try await testDesktopAppSelection()
         try await UsageTests.run()
         try await QuotaAlertTests.run()
         print("CodexProfilesMenu unit tests passed.")
@@ -572,6 +573,42 @@ struct CodexProfilesMenuTests {
             "menu commands must start in the home directory rather than inherit a project binding")
     }
 
+    /// Two fixture bundles share one bundle identifier, like a stale ChatGPT.app beside the running Codex.app.
+    private static func testDesktopAppSelection() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanup() }
+        func bundle(_ name: String, executable: String) throws -> URL {
+            let app = fixture.url(name)
+            let macOS = app.appendingPathComponent("Contents/MacOS")
+            try FileManager.default.createDirectory(at: macOS, withIntermediateDirectories: true)
+            let plist: [String: Any] = ["CFBundleIdentifier": "com.openai.codex", "CFBundleExecutable": executable]
+            try (plist as NSDictionary).write(to: app.appendingPathComponent("Contents/Info.plist"))
+            try Data().write(to: macOS.appendingPathComponent(executable))
+            return app
+        }
+        let old = try bundle("ChatGPT.app", executable: "ChatGPT")
+        let current = try bundle("Codex.app", executable: "ChatGPT")
+        let installed = [old.path, current.path]
+        let missing = fixture.url("Missing.app")
+
+        let running = DesktopAppLocator(environment: [:], installed: installed)
+        expect(running.selectedApp(running: [current])?.path == current.path, "the running bundle must win over the first installed bundle")
+        expect(running.selectedApp(running: [])?.path == old.path, "with nothing running, the first installed bundle is the fallback")
+        expect(running.selectedApp(running: [missing, current])?.path == current.path, "an unusable running bundle must be skipped")
+        expect(DesktopAppLocator(environment: [:], installed: [missing.path]).selectedApp(running: []) == nil, "no usable bundle must select nothing")
+        for (variable, value) in [("CHATGPT_APP", old.path), ("CODEX_APP", old.path), ("CODEX_APP_BIN", old.path + "/Contents/MacOS/ChatGPT")] {
+            let explicit = DesktopAppLocator(environment: [variable: value], installed: installed)
+            expect(explicit.selectedApp(running: [current])?.path == old.path, "\(variable) must override the running bundle")
+        }
+        expect(DesktopAppLocator(environment: ["CHATGPT_APP": missing.path], installed: installed).selectedApp(running: [current]) == nil,
+            "an unusable explicit override must not fall back to another bundle")
+
+        // The chosen bundle reaches the CLI as CHATGPT_APP, so the launch reopens that bundle and not the older one.
+        let client = CLIClient(executableURL: fixture.executable)
+        try await client.launch(.profile("default"), in: .chatGPT, appURL: current)
+        expect(try fixture.read("app-env") == current.path, "the CLI must be told to launch the running bundle: \(try fixture.read("app-env"))")
+    }
+
     private static func binding(_ name: String, _ profile: String, pathExists: Bool = true, profileExists: Bool = true) -> WorkspaceBinding {
         WorkspaceBinding(path: "/Users/test/Dev/" + name, profile: profile, pathExists: pathExists, profileExists: profileExists)
     }
@@ -631,6 +668,7 @@ struct CodexProfilesMenuTests {
                 fi
                 ;;
               app:*)
+                printf '%s' "${CHATGPT_APP:-}" > "$fixture/app-env"
                 if [ -f "$fixture/launch-error" ]; then cat "$fixture/launch-error" >&2; exit 1; fi
                 ;;
               *) printf 'unexpected command\n' >&2; exit 1 ;;

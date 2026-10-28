@@ -18,7 +18,7 @@ shortcut. **Open at Login** in the gear menu starts the app quietly in the menu
 bar when you log in; macOS may ask you to allow it in Login Items. Opening the
 app again from Finder or Spotlight shows the menu.
 
-Open a profile or workspace in **ChatGPT** to use the original installed ChatGPT app.
+Open a profile or workspace in **ChatGPT** to use the original installed ChatGPT app. When both ChatGPT.app and Codex.app are installed, the menu uses the one that is running (so **Switch** quits and reopens that bundle); an explicit `CHATGPT_APP`, `CODEX_APP` or `CODEX_APP_BIN` always wins, and with none running the first installed app is used.
 A named profile opens a window with separate local Desktop state and may
 require sign-in inside that window. `default` uses the stock Desktop session.
 **Sign In to Codex CLI** in the settings menu starts the official CLI login in

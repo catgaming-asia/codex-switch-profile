@@ -254,13 +254,49 @@ struct ProfileAccessTokenExpiry {
     }
 }
 
+/// Chooses the Desktop bundle for Switch and every ChatGPT launch. An explicit
+/// `CHATGPT_APP`, `CODEX_APP` or `CODEX_APP_BIN` always wins. Otherwise the
+/// supported bundle that is already running is used, so a stale second copy in
+/// /Applications is never closed or reopened instead of it; with none running,
+/// the first installed bundle is used. The original signed bundle is always the
+/// one launched.
+struct DesktopAppLocator {
+    var environment = ProcessInfo.processInfo.environment
+    var installed = ["/Applications/ChatGPT.app", "/Applications/Codex.app"]
+
+    func selectedApp(running: [URL]? = nil) -> URL? {
+        if let explicit = explicitCandidates() { return explicit.map { URL(fileURLWithPath: $0) }.first(where: isUsable) }
+        return ((running ?? runningBundles()) + installed.map { URL(fileURLWithPath: $0) }).first(where: isUsable)
+    }
+
+    func isUsable(_ url: URL) -> Bool { Bundle(url: url)?.executableURL != nil }
+
+    /// Running ChatGPT or Codex Desktop bundles, matched by bundle identifier prefix and executable name.
+    func runningBundles() -> [URL] {
+        NSWorkspace.shared.runningApplications.filter {
+            !$0.isTerminated && ($0.bundleIdentifier ?? "").hasPrefix("com.openai.")
+                && ["ChatGPT", "Codex"].contains($0.executableURL?.lastPathComponent ?? "")
+        }.compactMap(\.bundleURL)
+    }
+
+    private func explicitCandidates() -> [String]? {
+        if let value = environment["CHATGPT_APP"], !value.isEmpty { return [value] }
+        if let value = environment["CODEX_APP"], !value.isEmpty { return [value] }
+        if let value = environment["CODEX_APP_BIN"], !value.isEmpty {
+            guard let range = value.range(of: "/Contents/MacOS/") else { return [] }
+            return [String(value[..<range.lowerBound])]
+        }
+        return nil
+    }
+}
+
 @MainActor
 struct DefaultProfileSwitcher {
     func switchToDefault(from profile: String, client: CLIClient) async throws -> (backup: URL?, restarted: Bool) {
         let home = URL(fileURLWithPath: ProcessInfo.processInfo.environment["HOME"] ?? NSHomeDirectory())
         let transfer = ProfileAuthTransfer()
         try transfer.validateSource(profile, home: home)
-        let appURL = try desktopAppURL()
+        guard let appURL = DesktopAppLocator().selectedApp() else { throw DefaultProfileSwitchError.desktopAppMissing }
         try await client.createProfile("default")
 
         let running = NSWorkspace.shared.runningApplications.filter {
@@ -281,12 +317,12 @@ struct DefaultProfileSwitcher {
         do {
             backup = try transfer.copyToDefault(from: profile, home: home)
         } catch {
-            if shouldRestart { try? await client.launch(.profile("default"), in: .chatGPT) }
+            if shouldRestart { try? await client.launch(.profile("default"), in: .chatGPT, appURL: appURL) }
             throw error
         }
         if shouldRestart {
             do {
-                try await client.launch(.profile("default"), in: .chatGPT)
+                try await client.launch(.profile("default"), in: .chatGPT, appURL: appURL)
             } catch {
                 let recovery = backup.map { "The previous default authentication is saved at \($0.path)." }
                     ?? "There was no previous default authentication."
@@ -294,21 +330,5 @@ struct DefaultProfileSwitcher {
             }
         }
         return (backup, shouldRestart)
-    }
-
-    private func desktopAppURL() throws -> URL {
-        let environment = ProcessInfo.processInfo.environment
-        let candidates: [String]
-        if let value = environment["CHATGPT_APP"], !value.isEmpty { candidates = [value] }
-        else if let value = environment["CODEX_APP"], !value.isEmpty { candidates = [value] }
-        else if let value = environment["CODEX_APP_BIN"], !value.isEmpty {
-            if let range = value.range(of: "/Contents/MacOS/") { candidates = [String(value[..<range.lowerBound])] }
-            else { candidates = [] }
-        } else { candidates = ["/Applications/ChatGPT.app", "/Applications/Codex.app"] }
-        for path in candidates {
-            let url = URL(fileURLWithPath: path)
-            if Bundle(url: url)?.executableURL != nil { return url }
-        }
-        throw DefaultProfileSwitchError.desktopAppMissing
     }
 }

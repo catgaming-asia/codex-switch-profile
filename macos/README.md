@@ -98,6 +98,9 @@ The menu is one scrolling panel: **In use** shows the current Codex and Claude a
 
 - **Account** profiles run Claude Code with their own `CLAUDE_CONFIG_DIR` under `~/Library/Application Support/AI Profile/claude/accounts`. Choose **Sign in…** to run `claude auth login` for that profile in Terminal. The built-in **Default account** is your normal `~/.claude` login.
 - **API** profiles hold an endpoint, optional model and an API key. The key is stored only in Keychain; Claude Code reads it through `apiKeyHelper`. No request is sent to test it, and no quota is shown for API profiles.
+
+Click a Claude profile's icon to see its info page (account email, plan and organization, or API endpoint, model and whether a key is saved) and **Back** to return to the list; missing details show Unavailable and API keys are never displayed.
+
 - **Switch** on an API profile writes `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` and `apiKeyHelper` into `~/.claude/settings.json`, keeping every other setting. A private backup is saved in `AI Profile/claude/backups` first, and switching to an account profile restores your previous values. Switching to a non-default account profile restores the default settings and marks it current; it applies to Claude Code started with **Open in Terminal**, because Claude Code reads one account per config folder. **Open in Terminal** on any Claude profile that isn't current switches to it first, so Current always matches the session that opens.
 - Changes affect new Claude Code sessions only. Running sessions and the Claude Desktop account are not changed.
 

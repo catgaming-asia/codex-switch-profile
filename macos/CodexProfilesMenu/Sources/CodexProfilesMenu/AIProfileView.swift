@@ -162,10 +162,54 @@ private struct CurrentSection: View {
     }
 }
 
+private struct ClaudeProfileInfoRow: View {
+    let title: String
+    let value: String?
+    var body: some View {
+        HStack(alignment: .firstTextBaseline) {
+            Text(title).font(.system(size: 11)).foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
+            Text(value ?? "Unavailable").font(.system(size: 12)).textSelection(.enabled)
+                .foregroundStyle(value == nil ? .secondary : .primary)
+            Spacer(minLength: 0)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+/// Safe details for one Claude profile. API keys are never read, only whether one is saved.
+private struct ClaudeProfileInfo: View {
+    let profile: ClaudeProfile
+    let account: ClaudeAccount?
+    let isConfigured: Bool
+    let isCurrent: Bool
+    let back: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(action: back) { Label("Back", systemImage: "chevron.left") }
+                .buttonStyle(.borderless).font(.system(size: 12))
+                .accessibilityLabel("Back to Claude profiles")
+            ClaudeProfileInfoRow(title: "Name", value: profile.name)
+            ClaudeProfileInfoRow(title: "Type", value: profile.kind == .api ? "API" : "Claude Code account")
+            ClaudeProfileInfoRow(title: "Status", value: isCurrent ? "Current" : "Not current")
+            if profile.kind == .api {
+                ClaudeProfileInfoRow(title: "Endpoint", value: profile.baseURL?.nilIfEmpty)
+                ClaudeProfileInfoRow(title: "Model", value: profile.model?.nilIfEmpty ?? "Claude Code default")
+                ClaudeProfileInfoRow(title: "API key", value: isConfigured ? "Configured" : "Needs setup")
+            } else {
+                ClaudeProfileInfoRow(title: "Email", value: account?.email)
+                ClaudeProfileInfoRow(title: "Plan", value: account?.plan.map { "Claude \($0.capitalized)" })
+                ClaudeProfileInfoRow(title: "Organization", value: account?.organization)
+            }
+        }
+    }
+}
+
 private struct ClaudeProfileRow: View {
     let profile: ClaudeProfile
     @ObservedObject var store: ClaudeProfileStore
     let accountEmail: String?
+    let showInfo: () -> Void
     let edit: () -> Void
     let report: (String?) -> Void
     @State private var confirmingDelete = false
@@ -179,7 +223,12 @@ private struct ClaudeProfileRow: View {
         let isCurrent = store.currentID == profile.id
         VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 8) {
-                Image(systemName: profile.kind == .api ? "key" : "person.crop.circle").frame(width: 16)
+                Button(action: showInfo) {
+                    Image(systemName: profile.kind == .api ? "key" : "person.crop.circle").frame(width: 16)
+                }
+                .buttonStyle(.plain)
+                .help("Show info for \(profile.name)")
+                .accessibilityLabel("Info for \(profile.name)")
                 VStack(alignment: .leading, spacing: 1) {
                     Text(profile.name).font(.system(size: 12, weight: .medium))
                     Text(profile.kind == .api ? "\(profile.baseURL ?? "") · \(profile.model ?? "default model") · \(status)" : status)
@@ -279,10 +328,19 @@ private struct ClaudeProfileForm: View {
 private struct ClaudeProfilesSection: View {
     @ObservedObject var store: ClaudeProfileStore
     @ObservedObject var settings: AIProfileSettings
-    let emails: (ClaudeProfile) -> String?
+    @ObservedObject var usage: ClaudeUsageStore
+    let accounts: (ClaudeProfile) -> ClaudeAccount?
+    @State private var infoID: String?
     @State private var editorOpen = false
     @State private var editing: ClaudeProfile?
     @State private var error: String?
+
+    /// Plan comes only from the usage reading, which covers the default `~/.claude` account.
+    private func info(for profile: ClaudeProfile) -> ClaudeAccount? {
+        guard profile.kind == .account, let account = accounts(profile) else { return nil }
+        guard profile.isDefaultAccount, case let .available(snapshot) = usage.state else { return account }
+        return ClaudeAccount(email: account.email, organization: account.organization, plan: snapshot.account.plan)
+    }
 
     var body: some View {
         let expanded = settings.claudeProfilesExpanded
@@ -300,7 +358,7 @@ private struct ClaudeProfilesSection: View {
                 .accessibilityValue(expanded ? "Expanded" : "Collapsed")
                 .accessibilityHint("Shows or hides the Claude profiles")
                 Spacer()
-                if expanded {
+                if expanded && infoID == nil {
                     Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus") }
                         .buttonStyle(.borderless).font(.system(size: 12))
                 }
@@ -310,9 +368,13 @@ private struct ClaudeProfilesSection: View {
                 if editorOpen {
                     ClaudeProfileForm(store: store, editing: editing) { editorOpen = false }
                         .id(editing?.id ?? "new")
+                } else if let profile = store.profiles.first(where: { $0.id == infoID }) {
+                    ClaudeProfileInfo(profile: profile, account: info(for: profile), isConfigured: store.isConfigured(profile),
+                                      isCurrent: store.currentID == profile.id) { infoID = nil }
                 } else {
                     ForEach(store.profiles) { profile in
-                        ClaudeProfileRow(profile: profile, store: store, accountEmail: emails(profile),
+                        ClaudeProfileRow(profile: profile, store: store, accountEmail: accounts(profile)?.email,
+                                         showInfo: { infoID = profile.id },
                                          edit: { editing = profile; editorOpen = true }) { error = $0 }
                     }
                 }
@@ -383,9 +445,9 @@ final class AIProfileViewController: NSViewController {
             guard let self else { return }
             Task { await self.claude.refresh(force: true) }
         })
-        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles, settings: settings) { [weak self] profile in
+        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles, settings: settings, usage: claude) { [weak self] profile in
             guard let self, profile.kind == .account else { return nil }
-            return self.claudeEmail(in: self.profiles.accountDirectory(for: profile))
+            return self.claudeAccount(in: self.profiles.accountDirectory(for: profile))
         })
         codex.isCollapsed = !settings.codexProfilesExpanded
         codex.onCollapseChange = { [weak self] collapsed in self?.settings.codexProfilesExpanded = !collapsed }
@@ -442,11 +504,11 @@ final class AIProfileViewController: NSViewController {
         relayout()
     }
 
-    /// The signed-in email recorded in a profile's own Claude Code folder.
-    private func claudeEmail(in directory: URL?) -> String? {
+    /// The signed-in account recorded in a profile's own Claude Code folder.
+    private func claudeAccount(in directory: URL?) -> ClaudeAccount {
         let home = FileManager.default.homeDirectoryForCurrentUser
         let data = try? Data(contentsOf: directory?.appendingPathComponent(".claude.json") ?? home.appendingPathComponent(".claude.json"))
-        return ClaudeUsageClient().parseAccount(data, plan: nil).email
+        return ClaudeUsageClient().parseAccount(data, plan: nil)
     }
 
     /// Mirrors the store's active Codex profile and its default-home reading.

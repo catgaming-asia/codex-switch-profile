@@ -16,6 +16,7 @@ struct CodexProfilesMenuApp {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem?
+    private var claudeStatusItem: NSStatusItem?
     private let popover = NSPopover()
     private let store = WorkspaceStore(client: CLIClient())
     private let notifier = UserNotificationsQuotaNotifier()
@@ -34,18 +35,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
         }
-        let controller = AIProfileViewController(codex: codexController, settings: settings, claude: claudeStore)
+        let controller = AIProfileViewController(codex: codexController, store: store, settings: settings, claude: claudeStore)
         controller.onPreferredContentSizeChange = { [weak self] size in
             self?.popover.contentSize = size
         }
-        settings.onMenuBarProviderChange = { [weak self] in
+        settings.onMenuBarChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
-            if self.settings.menuBarProvider == .claude { Task { await self.claudeStore.refresh() } }
+            if self.settings.showsClaudeInMenuBar { Task { await self.claudeStore.refresh() } }
         }
         claudeStore.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
+            self.menuController?.refreshCurrent()
         }
         menuController = controller
 
@@ -59,8 +61,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         statusItem = item
+        let claudeItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        claudeStatusItem = claudeItem
 
-        if let button = item.button {
+        for button in [item.button, claudeItem.button].compactMap({ $0 }) {
             button.target = self
             button.action = #selector(togglePopover)
             button.sendAction(on: [.leftMouseUp, .rightMouseUp])
@@ -97,7 +101,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.updateSessionMonitor()
                 await self.store.refreshUsage()
                 await self.store.autoSwitchIfNeeded()
-                if self.settings.menuBarProvider == .claude { await self.claudeStore.refresh() }
+                if self.settings.showsClaudeInMenuBar { await self.claudeStore.refresh() }
                 try? await Task.sleep(for: .seconds(300), tolerance: .seconds(60))
             }
         }
@@ -129,29 +133,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// The icon is a template image either way; a low quota adds a badge shape,
-    /// and the tooltip and accessibility label name each profile and window.
+    /// Codex and Claude each own a status item, shown by their checkbox. With
+    /// neither checked, the Codex item stays as a plain icon so the menu can
+    /// still be opened. Icons are template images; a low quota adds a badge
+    /// shape, and the tooltip and accessibility label name each window.
     private func updateStatusItem(_ indicator: QuotaIndicator) {
-        guard let button = statusItem?.button else { return }
         let now = Date()
-        let showsClaude = settings.menuBarProvider == .claude
-        var claudeSnapshot: ClaudeSnapshot?
-        if case let .available(snapshot) = claudeStore.state { claudeSnapshot = snapshot }
-        let quota = showsClaude
-            ? claudeSnapshot?.menuBarText(at: now)
-            : DefaultMenuBarQuota(reading: store.usage["default"], at: now).text
         let namesHidden = UserDefaults.standard.bool(forKey: "hideProfileNames")
-        let label = namesHidden ? "AI profile" : showsClaude ? "AI Profile (Claude)" : indicator.accessibilityLabel(at: now)
-        button.image = StatusItemIcon.image(
-            for: showsClaude ? claudeSnapshot?.menuBarLevel(at: now) ?? .normal : indicator.level,
-            symbolName: showsClaude ? StatusItemIcon.claudeSymbolName : StatusItemIcon.symbolName,
-            accessibilityDescription: label)
+        let showsCodex = settings.showsCodexInMenuBar
+        let showsClaude = settings.showsClaudeInMenuBar
+        statusItem?.isVisible = showsCodex || !showsClaude
+        claudeStatusItem?.isVisible = showsClaude
+        if let button = statusItem?.button {
+            let quota = showsCodex ? DefaultMenuBarQuota(reading: store.usage["default"], at: now).text : nil
+            let label = namesHidden ? "AI profile" : showsCodex ? indicator.accessibilityLabel(at: now) : "AI Profile"
+            apply(to: statusItem, button: button, level: showsCodex ? indicator.level : .normal,
+                  symbolName: StatusItemIcon.symbolName, quota: quota, label: label,
+                  toolTip: namesHidden ? "AI profile" : showsCodex ? indicator.toolTip(at: now) : "AI Profile", provider: "Codex")
+        }
+        if let button = claudeStatusItem?.button {
+            var snapshot: ClaudeSnapshot?
+            if case let .available(value) = claudeStore.state { snapshot = value }
+            apply(to: claudeStatusItem, button: button, level: snapshot?.menuBarLevel(at: now) ?? .normal,
+                  symbolName: StatusItemIcon.claudeSymbolName, quota: snapshot?.menuBarText(at: now),
+                  label: namesHidden ? "AI profile" : "AI Profile (Claude)",
+                  toolTip: namesHidden ? "AI profile" : "AI Profile: Claude", provider: "Claude")
+        }
+    }
+
+    private func apply(to item: NSStatusItem?, button: NSStatusBarButton, level: QuotaLevel, symbolName: String,
+                       quota: String?, label: String, toolTip: String, provider: String) {
+        button.image = StatusItemIcon.image(for: level, symbolName: symbolName, accessibilityDescription: label)
         button.imagePosition = .imageLeading
         button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         button.title = quota ?? ""
-        statusItem?.length = quota == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
-        button.toolTip = namesHidden ? "AI profile" : showsClaude ? "AI Profile: Claude" : indicator.toolTip(at: now)
-        button.setAccessibilityLabel(quota.map { "\(label). Default \(showsClaude ? "Claude" : "Codex") quota: \($0)" } ?? label)
+        item?.length = quota == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
+        button.toolTip = toolTip
+        button.setAccessibilityLabel(quota.map { "\(label). \(provider) quota: \($0)" } ?? label)
+    }
+
+    /// The menu opens from whichever status item is visible.
+    private var anchorButton: NSStatusBarButton? {
+        if statusItem?.isVisible == true { return statusItem?.button }
+        return claudeStatusItem?.button
     }
 
     private static var launchedAsLoginItem: Bool {
@@ -184,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func togglePopover() {
-        guard let button = statusItem?.button else { return }
+        guard let button = anchorButton else { return }
 
         if popover.isShown {
             popover.performClose(nil)
@@ -198,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await store.refreshUsage()
                 await store.autoSwitchIfNeeded()
             }
-            if settings.tab == .claude { Task { await claudeStore.refresh() } }
+            Task { await claudeStore.refresh() }
             Task { await alerts.refreshPermission() }
         }
     }

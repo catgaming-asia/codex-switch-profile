@@ -171,35 +171,26 @@ private func runCapturing(_ path: String, _ arguments: [String]) -> Data? {
     return process.terminationStatus == 0 ? data : nil
 }
 
-enum MenuBarProvider: String, CaseIterable {
-    case codex
-    case claude
-
-    var title: String { self == .codex ? "Codex" : "Claude" }
-}
-
-enum PopupTab: String, CaseIterable {
-    case codex
-    case claude
-}
-
-/// Persistent AI-profile preferences. The menu-bar provider and the popup tab
-/// are independent: changing one never changes the other.
+/// Persistent menu-bar preferences. Each AI has its own checkbox, so the menu
+/// bar can show Codex, Claude, both, or neither. Auto Codex is a separate
+/// Codex setting and is not stored here.
 @MainActor
 final class AIProfileSettings: ObservableObject {
     private let defaults: UserDefaults
-    @Published var menuBarProvider: MenuBarProvider {
-        didSet { defaults.set(menuBarProvider.rawValue, forKey: "menuBarProvider"); onMenuBarProviderChange?() }
+    @Published var showsCodexInMenuBar: Bool {
+        didSet { defaults.set(showsCodexInMenuBar, forKey: "menuBarShowsCodex"); onMenuBarChange?() }
     }
-    @Published var tab: PopupTab {
-        didSet { defaults.set(tab.rawValue, forKey: "popupTab") }
+    @Published var showsClaudeInMenuBar: Bool {
+        didSet { defaults.set(showsClaudeInMenuBar, forKey: "menuBarShowsClaude"); onMenuBarChange?() }
     }
-    var onMenuBarProviderChange: (() -> Void)?
+    var onMenuBarChange: (() -> Void)?
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        menuBarProvider = defaults.string(forKey: "menuBarProvider").flatMap(MenuBarProvider.init) ?? .codex
-        tab = defaults.string(forKey: "popupTab").flatMap(PopupTab.init) ?? .codex
+        // Earlier builds stored one provider; keep that choice until a checkbox is saved.
+        let legacy = defaults.string(forKey: "menuBarProvider")
+        showsCodexInMenuBar = defaults.object(forKey: "menuBarShowsCodex") as? Bool ?? (legacy != "claude")
+        showsClaudeInMenuBar = defaults.object(forKey: "menuBarShowsClaude") as? Bool ?? (legacy == "claude")
     }
 }
 

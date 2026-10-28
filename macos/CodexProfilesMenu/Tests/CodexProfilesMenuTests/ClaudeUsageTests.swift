@@ -25,10 +25,17 @@ struct ClaudeUsageTests {
         expect(account.email == "a@example.com" && account.plan == "pro", "account")
         let defaults = UserDefaults(suiteName: "claude-usage-test-\(UUID().uuidString)")!
         let settings = AIProfileSettings(defaults: defaults)
-        expect(settings.menuBarProvider == .codex && settings.tab == .codex, "defaults")
-        settings.menuBarProvider = .claude
-        expect(AIProfileSettings(defaults: defaults).menuBarProvider == .claude, "menu bar persisted")
-        expect(AIProfileSettings(defaults: defaults).tab == .codex, "tab independent")
+        expect(settings.showsCodexInMenuBar && !settings.showsClaudeInMenuBar, "defaults keep Codex only")
+        settings.showsClaudeInMenuBar = true
+        expect(AIProfileSettings(defaults: defaults).showsCodexInMenuBar && AIProfileSettings(defaults: defaults).showsClaudeInMenuBar, "both persisted")
+        settings.showsCodexInMenuBar = false
+        settings.showsClaudeInMenuBar = false
+        let reloaded = AIProfileSettings(defaults: defaults)
+        expect(!reloaded.showsCodexInMenuBar && !reloaded.showsClaudeInMenuBar, "none persisted")
+        let legacy = UserDefaults(suiteName: "claude-usage-legacy-\(UUID().uuidString)")!
+        legacy.set("claude", forKey: "menuBarProvider")
+        let migrated = AIProfileSettings(defaults: legacy)
+        expect(!migrated.showsCodexInMenuBar && migrated.showsClaudeInMenuBar, "legacy provider migrates")
         let now = Date()
         let low = ClaudeSnapshot(account: account, windows: [ClaudeQuotaWindow(id: "five_hour", title: "5h", shortLabel: "5h", usedPercent: 95, resetsAt: now.addingTimeInterval(600))], checkedAt: now)
         expect(low.menuBarLevel(at: now) == .critical, "claude level from claude windows")

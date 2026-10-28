@@ -17,7 +17,7 @@ die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
   || die 'Release signing requires a Developer ID Application identity; ad hoc signing is not supported.'
 
 MENU_APP_BUILD_DIR="$OUTPUT_DIR" "$ROOT_DIR/scripts/macos/build-menu-app.sh"
-APP_DIR="$OUTPUT_DIR/Codex Profiles.app"
+APP_DIR="$OUTPUT_DIR/AI Profile.app"
 VERSION="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")"
 DMG_NAME="Codex-Profiles-$VERSION-universal.dmg"
 TMP_DIR="$(mktemp -d "$OUTPUT_DIR/.menu-dmg.XXXXXX")"
@@ -57,19 +57,19 @@ publish() {
 
 STAGING_DIR="$TMP_DIR/volume"
 mkdir "$STAGING_DIR"
-ditto "$APP_DIR" "$STAGING_DIR/Codex Profiles.app"
+ditto "$APP_DIR" "$STAGING_DIR/AI Profile.app"
 
 if [[ -n "$SIGNING_IDENTITY" ]]; then
   codesign --force --sign "$SIGNING_IDENTITY" --timestamp --options runtime \
     --entitlements "$ROOT_DIR/macos/CodexProfilesMenu/Release.entitlements" \
-    "$STAGING_DIR/Codex Profiles.app"
-  codesign --verify --deep --strict "$STAGING_DIR/Codex Profiles.app"
+    "$STAGING_DIR/AI Profile.app"
+  codesign --verify --deep --strict "$STAGING_DIR/AI Profile.app"
 fi
 
 ln -s /Applications "$STAGING_DIR/Applications"
 install -m 644 "$ROOT_DIR/LICENSE" "$STAGING_DIR/License.txt"
 cat > "$STAGING_DIR/Read Me.txt" <<'EOF'
-Drag Codex Profiles.app to Applications, then open it.
+Drag AI Profile.app to Applications, then open it.
 Open an existing profile, or use Create Profile on first run.
 No project folder is required. Add Workspace is an optional shortcut.
 Open the profile in ChatGPT and sign in there if prompted.
@@ -84,7 +84,7 @@ if [[ -z "$SIGNING_IDENTITY" ]]; then
     >> "$STAGING_DIR/Read Me.txt"
 fi
 
-hdiutil create -quiet -volname 'Codex Profiles' -srcfolder "$STAGING_DIR" \
+hdiutil create -quiet -volname 'AI Profile' -srcfolder "$STAGING_DIR" \
   -format UDZO "$TMP_DIR/$DMG_NAME"
 
 if [[ -n "$SIGNING_IDENTITY" ]]; then

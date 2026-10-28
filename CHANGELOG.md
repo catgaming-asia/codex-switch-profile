@@ -7,6 +7,10 @@ and this project follows semantic versioning for tagged releases.
 
 ## Unreleased
 
+### Changed
+
+- The macOS menu app is now displayed and built as **AI Profile.app**. The bundle identifier, executable name and saved state are unchanged.
+
 ### Added
 
 - The macOS menu popup now has **Codex** and **Claude** tabs. The Claude tab shows the signed-in Claude Code account and its real 5-hour and weekly subscription quota with reset times, or a clear unavailable state; it never shows token cost as quota. A menu bar setting, saved independently of the tab, chooses whether Codex or Claude usage appears next to the icon.

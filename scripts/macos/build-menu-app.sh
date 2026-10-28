@@ -4,7 +4,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUTPUT_DIR="${MENU_APP_BUILD_DIR:-$ROOT_DIR/build/macos}"
-APP_DIR="$OUTPUT_DIR/Codex Profiles.app"
+APP_DIR="$OUTPUT_DIR/AI Profile.app"
 
 [[ "$(uname -s)" == "Darwin" ]] || {
   printf 'Error: the native menu app can only be built on macOS.\n' >&2
@@ -19,7 +19,7 @@ command -v swiftc >/dev/null 2>&1 || {
 mkdir -p "$OUTPUT_DIR"
 TMP_DIR="$(mktemp -d "$OUTPUT_DIR/.menu-app.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT HUP INT TERM
-CONTENTS_DIR="$TMP_DIR/Codex Profiles.app/Contents"
+CONTENTS_DIR="$TMP_DIR/AI Profile.app/Contents"
 install -d "$CONTENTS_DIR/MacOS" "$CONTENTS_DIR/Resources/bin"
 SOURCE_DIR="$TMP_DIR/Sources"
 ditto "$ROOT_DIR/macos/CodexProfilesMenu/Sources/CodexProfilesMenu" "$SOURCE_DIR"
@@ -52,6 +52,6 @@ swiftc -target "$(uname -m)-apple-macosx13.0" -parse-as-library -O \
 iconutil -c icns "$TMP_DIR/AppIcon.iconset" -o "$CONTENTS_DIR/Resources/AppIcon.icns"
 
 rm -rf "$APP_DIR"
-mv "$TMP_DIR/Codex Profiles.app" "$APP_DIR"
+mv "$TMP_DIR/AI Profile.app" "$APP_DIR"
 
 printf 'Built %s\n' "$APP_DIR"

@@ -4,7 +4,7 @@ The native menu-bar companion bundles the existing `codex-profile` engine.
 It runs on macOS 13 or newer, on Apple silicon and Intel. It requires neither
 Swift nor a separate `codex-profile` installation on the user's Mac.
 
-Drag **Codex Profiles.app** to **Applications**, open it, and choose
+Drag **AI Profile.app** to **Applications**, open it, and choose
 **Open** beside an existing profile. If none exists, choose **Create profile…**
 and enter a name such as `work` or `personal`. A project folder is not required.
 You may optionally choose an existing `auth.json` in the creation dialog. The
@@ -239,7 +239,7 @@ The builder compiles both architectures, bundles the CLI, license and icon,
 and creates a compressed, read-only DMG with an Applications shortcut:
 
 ```text
-build/macos/Codex Profiles.app
+build/macos/AI Profile.app
 build/macos/Codex-Profiles-1.3.0-universal.dmg
 build/macos/Codex-Profiles-1.3.0-universal.dmg.sha256
 ```

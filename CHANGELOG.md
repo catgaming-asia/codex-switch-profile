@@ -15,6 +15,10 @@ and this project follows semantic versioning for tagged releases.
 - The macOS menu app's In use section no longer shows profile names, accounts, emails, plans, organizations, endpoints or models for Codex and Claude; it keeps the provider, menu bar checkboxes, quota bars and reset times.
 - The macOS menu app's Codex profiles and Claude profiles sections now fold open and closed from their headers. Both start collapsed, and each remembers its own state.
 
+### Fixed
+
+- Command-V, Command-C, Command-X, Command-A and Undo/Redo now work in the macOS menu's text fields, such as the Claude profile form. The menu-bar app had no Edit menu to carry those shortcuts, so only right-click Paste worked.
+
 ### Added
 
 - The macOS menu is now one vertical scrolling panel: **In use** (Codex and Claude with their usage, each with its own menu bar checkbox, so the menu bar can show Codex, Claude, both or neither), **Codex profiles** (unchanged list, Switch, Auto and workspaces) and **Claude profiles**. Claude usage is the real 5-hour and weekly subscription quota or a clear unavailable state; it never shows token cost as quota, and API profiles show endpoint and model instead of a quota.

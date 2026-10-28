@@ -79,6 +79,27 @@ struct MenuInteractionTests {
         expect(isMonochrome(headerIcon.contentTintColor), "header symbol must use native monochrome tint")
         expect(!allViews.contains { $0 is NSSearchField }, "menu must omit the Search field")
         expect(!controller.handleShortcut(key(40, characters: "k", modifiers: .command)), "Command-K must no longer focus Search")
+        // Standard editing keys must never be consumed here; they belong to the Edit menu and the focused field.
+        let editKeys: [(UInt16, String)] = [(6, "z"), (7, "x"), (8, "c"), (9, "v"), (0, "a")]
+        for (code, character) in editKeys {
+            expect(!controller.handleShortcut(key(code, characters: character, modifiers: .command)),
+                "Command-\(character) must pass through to the focused text field")
+        }
+        // The Edit menu has no target, so each key equivalent reaches the focused responder, here a probe.
+        let probe = EditProbe()
+        let probeWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 100, height: 100), styleMask: [], backing: .buffered, defer: true)
+        probeWindow.contentView = probe
+        expect(probeWindow.makeFirstResponder(probe), "the probe must take focus")
+        let editMenu = EditMenu().makeEditMenu()
+        for (_, character) in editKeys {
+            let item = editMenu.items.first { $0.keyEquivalent == character && $0.keyEquivalentModifierMask == .command }!
+            expect(item.target == nil && item.action != nil, "Edit item \(item.title) must dispatch through the responder chain")
+            expect(probeWindow.firstResponder?.tryToPerform(item.action!, with: item) == true, "\(item.title) must reach the focused responder")
+        }
+        expect(editMenu.items.contains { $0.keyEquivalent == "z" && $0.keyEquivalentModifierMask == [.command, .shift] },
+            "Redo must use Shift-Command-Z")
+        expect(probe.received == ["undo:", "cut:", "copy:", "paste:", "selectAll:"], "each Edit action must reach the responder once: \(probe.received)")
+        expect(EditMenu().makeMainMenu().items.last?.submenu?.title == "Edit", "the main menu must carry the Edit menu")
         expect(allViews.contains { $0 is NSPopUpButton }, "profile filter must remain available")
         expect(allViews.contains { $0 is NSSegmentedControl }, "launch destination must remain available")
         var initialRows = descendants(controller.view).compactMap { $0 as? LaunchRowButton }
@@ -547,4 +568,16 @@ struct MenuInteractionTests {
     private static func expect(_ value: @autoclosure () -> Bool, _ message: String) {
         guard value() else { fatalError(message) }
     }
+}
+
+/// A fake focused responder that records standard editing actions without touching the pasteboard.
+@MainActor
+private final class EditProbe: NSView {
+    var received: [String] = []
+    override var acceptsFirstResponder: Bool { true }
+    @objc func undo(_ sender: Any?) { received.append("undo:") }
+    @objc func cut(_ sender: Any?) { received.append("cut:") }
+    @objc func copy(_ sender: Any?) { received.append("copy:") }
+    @objc func paste(_ sender: Any?) { received.append("paste:") }
+    override func selectAll(_ sender: Any?) { received.append("selectAll:") }
 }

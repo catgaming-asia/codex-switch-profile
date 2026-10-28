@@ -64,6 +64,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { await self.claudeStore.refresh() }
         }
         menuController = controller
+        NSApp.mainMenu = EditMenu().makeMainMenu()
 
         popover.behavior = .transient
         updateAccessibilityPreferences()

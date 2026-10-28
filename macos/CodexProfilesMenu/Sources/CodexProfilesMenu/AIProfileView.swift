@@ -89,8 +89,6 @@ private struct CodexCurrentBlock: View {
                     .toggleStyle(.checkbox).font(.system(size: 11))
                     .help("Show Codex quota and icon in the menu bar")
             }
-            Text(model.profile == "default" ? "Default account" : "Profile \(model.profile)")
-                .font(.system(size: 12)).foregroundStyle(.secondary)
             if case let .available(limits, _) = model.usage {
                 ForEach(Array(limits.windows.enumerated()), id: \.offset) { _, window in
                     CodexQuotaRow(window: window, now: now)
@@ -117,11 +115,7 @@ private struct ClaudeCurrentBlock: View {
                     .toggleStyle(.checkbox).font(.system(size: 11))
                     .help("Show Claude quota and icon in the menu bar")
             }
-            let profile = profiles.current
-            Text(profile.name).font(.system(size: 12, weight: .medium))
-            if profile.kind == .api {
-                Text(profile.baseURL ?? "No endpoint").font(.system(size: 11)).foregroundStyle(.secondary)
-                Text(profile.model.map { "Model \($0)" } ?? "Model: Claude Code default").font(.system(size: 11)).foregroundStyle(.secondary)
+            if profiles.current.kind == .api {
                 Text("API billing has no subscription quota to show.").font(.system(size: 11)).foregroundStyle(.secondary)
             } else {
             switch store.state {
@@ -134,9 +128,6 @@ private struct ClaudeCurrentBlock: View {
                 Text(reason.title).font(.system(size: 12, weight: .medium))
                 Text(reason.detail).font(.system(size: 11)).foregroundStyle(.secondary)
             case let .available(snapshot):
-                let detail = [snapshot.account.email, snapshot.account.plan.map { "Claude \($0.capitalized)" }, snapshot.account.organization]
-                    .compactMap { $0 }.joined(separator: " · ")
-                Text(detail.isEmpty ? "Claude Code account" : detail).font(.system(size: 12)).foregroundStyle(.secondary)
                 ForEach(snapshot.windows, id: \.id) { ClaudeQuotaRow(window: $0, now: now) }
                 Text("Subscription quota, not token cost. Checked \(UsageFormat.clock(snapshot.checkedAt, relativeTo: now)).")
                     .font(.system(size: 11)).foregroundStyle(.secondary)

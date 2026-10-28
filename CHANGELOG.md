@@ -11,6 +11,7 @@ and this project follows semantic versioning for tagged releases.
 
 - The macOS menu app is now displayed and built as **AI Profile.app**. The bundle identifier, executable name and saved state are unchanged.
 - The macOS menu app's In use section now shows Codex 5h and weekly quota as progress bars with reset times, like Claude.
+- The macOS menu app's In use section no longer shows profile names, accounts, emails, plans, organizations, endpoints or models for Codex and Claude; it keeps the provider, menu bar checkboxes, quota bars and reset times.
 - The macOS menu app's Codex profiles and Claude profiles sections now fold open and closed from their headers. Both start collapsed, and each remembers its own state.
 
 ### Added

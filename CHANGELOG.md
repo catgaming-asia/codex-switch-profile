@@ -9,6 +9,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Added
 
+- The macOS menu popup now has **Codex** and **Claude** tabs. The Claude tab shows the signed-in Claude Code account and its real 5-hour and weekly subscription quota with reset times, or a clear unavailable state; it never shows token cost as quota. A menu bar setting, saved independently of the tab, chooses whether Codex or Claude usage appears next to the icon.
 - Account info in the macOS menu now shows the local access token JWT expiry when available, without displaying the token. This timestamp does not indicate when the profile or account expires.
 - Added **Update auth.json…** to named macOS profile menus. It copies a selected credential file into that profile, privately backs up the previous file, and refreshes Codex CLI usage.
 - Added an optional `auth.json` picker to the macOS **Create a profile** dialog. A new named profile can receive the selected credential file without copying any other profile state; the menu then refreshes its Codex usage.

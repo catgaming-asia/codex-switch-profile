@@ -1,0 +1,38 @@
+import Foundation
+
+@main
+@MainActor
+struct ClaudeUsageTests {
+    static func main() {
+        let client = ClaudeUsageClient()
+        let usage = Data("""
+        {"five_hour":{"utilization":24.0,"resets_at":"2030-01-01T10:00:00.500+00:00"},
+         "seven_day":{"utilization":31.5,"resets_at":"2030-01-05T10:00:00+00:00"},
+         "seven_day_opus":null}
+        """.utf8)
+        let windows = client.parseWindows(usage)
+        expect(windows.map(\.id) == ["five_hour", "seven_day"], "known non-null windows only")
+        expect(windows[0].remainingPercent == 76 && windows[1].remainingPercent == 68, "remaining percent")
+        expect(windows.allSatisfy { $0.resetsAt != nil }, "reset dates parse")
+        let snapshot = ClaudeSnapshot(account: ClaudeAccount(email: nil, organization: nil, plan: nil),
+                                      windows: windows, checkedAt: Date())
+        expect(snapshot.menuBarText(at: Date()) == "5h 76% · W 68%", "menu bar text")
+        expect(client.parseWindows(Data("{}".utf8)).isEmpty && client.parseWindows(Data("x".utf8)).isEmpty, "no invented numbers")
+        let credential = client.parseCredential(Data(#"{"claudeAiOauth":{"accessToken":"t","expiresAt":1000,"subscriptionType":"max"}}"#.utf8))
+        expect(credential?.plan == "max" && credential?.expiresAt == Date(timeIntervalSince1970: 1), "credential shape")
+        expect(client.parseCredential(Data("{}".utf8)) == nil, "missing credential")
+        let account = client.parseAccount(Data(#"{"oauthAccount":{"emailAddress":"a@example.com"}}"#.utf8), plan: "pro")
+        expect(account.email == "a@example.com" && account.plan == "pro", "account")
+        let defaults = UserDefaults(suiteName: "claude-usage-test-\(UUID().uuidString)")!
+        let settings = AIProfileSettings(defaults: defaults)
+        expect(settings.menuBarProvider == .codex && settings.tab == .codex, "defaults")
+        settings.menuBarProvider = .claude
+        expect(AIProfileSettings(defaults: defaults).menuBarProvider == .claude, "menu bar persisted")
+        expect(AIProfileSettings(defaults: defaults).tab == .codex, "tab independent")
+        print("Claude usage smoke tests passed.")
+    }
+
+    private static func expect(_ condition: Bool, _ message: String) {
+        guard condition else { fatalError("Failed: \(message)") }
+    }
+}

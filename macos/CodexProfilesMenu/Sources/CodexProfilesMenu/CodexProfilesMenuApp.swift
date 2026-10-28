@@ -20,18 +20,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let store = WorkspaceStore(client: CLIClient())
     private let notifier = UserNotificationsQuotaNotifier()
     private lazy var alerts = QuotaAlertController(store: store, notifier: notifier)
-    private var menuController: WorkspaceMenuViewController?
+    private let settings = AIProfileSettings()
+    private let claudeStore = ClaudeUsageStore()
+    private var menuController: AIProfileViewController?
     private var eventMonitor: Any?
     private var statusRefreshTask: Task<Void, Never>?
     private let sessionQuotaMonitor = SessionQuotaMonitor()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let controller = WorkspaceMenuViewController(store: store, alerts: alerts)
+        let codexController = WorkspaceMenuViewController(store: store, alerts: alerts)
+        codexController.onRequestClose = { [weak self] in self?.popover.performClose(nil) }
+        codexController.onProfileNameVisibilityChange = { [weak self] in
+            guard let self else { return }
+            self.updateStatusItem(self.alerts.indicator)
+        }
+        let controller = AIProfileViewController(codex: codexController, settings: settings, claude: claudeStore)
         controller.onPreferredContentSizeChange = { [weak self] size in
             self?.popover.contentSize = size
         }
-        controller.onRequestClose = { [weak self] in self?.popover.performClose(nil) }
-        controller.onProfileNameVisibilityChange = { [weak self] in
+        settings.onMenuBarProviderChange = { [weak self] in
+            guard let self else { return }
+            self.updateStatusItem(self.alerts.indicator)
+            if self.settings.menuBarProvider == .claude { Task { await self.claudeStore.refresh() } }
+        }
+        claudeStore.onChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)
         }
@@ -85,6 +97,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.updateSessionMonitor()
                 await self.store.refreshUsage()
                 await self.store.autoSwitchIfNeeded()
+                if self.settings.menuBarProvider == .claude { await self.claudeStore.refresh() }
                 try? await Task.sleep(for: .seconds(300), tolerance: .seconds(60))
             }
         }
@@ -121,16 +134,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateStatusItem(_ indicator: QuotaIndicator) {
         guard let button = statusItem?.button else { return }
         let now = Date()
-        let quota = DefaultMenuBarQuota(reading: store.usage["default"], at: now).text
+        let showsClaude = settings.menuBarProvider == .claude
+        var claudeSnapshot: ClaudeSnapshot?
+        if case let .available(snapshot) = claudeStore.state { claudeSnapshot = snapshot }
+        let quota = showsClaude
+            ? claudeSnapshot?.menuBarText(at: now)
+            : DefaultMenuBarQuota(reading: store.usage["default"], at: now).text
         let namesHidden = UserDefaults.standard.bool(forKey: "hideProfileNames")
-        let label = namesHidden ? "Codex Profiles" : indicator.accessibilityLabel(at: now)
+        let label = namesHidden || showsClaude ? "AI profile" : indicator.accessibilityLabel(at: now)
         button.image = StatusItemIcon.image(for: indicator.level, accessibilityDescription: label)
         button.imagePosition = .imageLeading
         button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         button.title = quota ?? ""
         statusItem?.length = quota == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
-        button.toolTip = namesHidden ? "Codex Profiles" : indicator.toolTip(at: now)
-        button.setAccessibilityLabel(quota.map { "\(label). Default Codex quota: \($0)" } ?? label)
+        button.toolTip = namesHidden || showsClaude ? "AI profile" : indicator.toolTip(at: now)
+        button.setAccessibilityLabel(quota.map { "\(label). Default \(showsClaude ? "Claude" : "Codex") quota: \($0)" } ?? label)
     }
 
     private static var launchedAsLoginItem: Bool {
@@ -177,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await store.refreshUsage()
                 await store.autoSwitchIfNeeded()
             }
+            if settings.tab == .claude { Task { await claudeStore.refresh() } }
             Task { await alerts.refreshPermission() }
         }
     }

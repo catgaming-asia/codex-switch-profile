@@ -1,12 +1,13 @@
 import AppKit
 
-/// The menu-bar icon. It stays a monochrome template image, so macOS adapts it
+/// The menu-bar icon, and the provider marks (Codex terminal, Claude sun) shared by every header.
+/// It stays a monochrome template image, so macOS adapts it
 /// to light, dark, tinted and increased-contrast menu bars. Low quota changes
 /// its shape, never only its colour: a badge dot when low, and a badge with an
 /// exclamation mark when critical.
 enum StatusItemIcon {
-    static let symbolName = "square.stack.3d.up.fill"
-    static let claudeSymbolName = "sparkles"
+    static let symbolName = "terminal.fill"
+    static let claudeSymbolName = "sun.max.fill"
     /// The badge sits in the bottom-right corner on whole points. Its odd
     /// diameter centres a one-point column on pixel boundaries, so the
     /// exclamation mark stays crisp on a 1x menu bar.

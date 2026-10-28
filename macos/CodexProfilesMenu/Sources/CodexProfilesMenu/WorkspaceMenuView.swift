@@ -32,7 +32,7 @@ final class WorkspaceMenuViewController: NSViewController {
     private let alerts: QuotaAlertController?
     private let backButton = NSButton()
     private let headerTitle = NSTextField(labelWithString: "Codex Profiles")
-    private let headerMark = NSImageView(image: NSImage(systemSymbolName: "square.stack.3d.up.fill", accessibilityDescription: nil) ?? NSImage())
+    private let headerMark = NSImageView(image: NSImage(systemSymbolName: StatusItemIcon.symbolName, accessibilityDescription: nil) ?? NSImage())
     private let profilePicker = NSPopUpButton()
     private let destinationPicker = NSSegmentedControl(labels: ["ChatGPT", "Terminal"], trackingMode: .selectOne, target: nil, action: nil)
     private let toolbar = NSStackView()
@@ -316,7 +316,7 @@ final class WorkspaceMenuViewController: NSViewController {
         scrollView = nil
         switch store.phase {
         case .idle, .loading:
-            showState(symbol: "square.stack.3d.up", title: "Loading your profiles", detail: "Reading local profiles and bindings…", progress: true)
+            showState(symbol: "terminal", title: "Loading your profiles", detail: "Reading local profiles and bindings…", progress: true)
         case let .failed(message):
             showState(symbol: "exclamationmark.triangle", title: "Couldn’t load profiles", detail: message, actionTitle: "Try again", action: #selector(refresh))
         case .ready where store.profiles.isEmpty && store.workspaces.isEmpty:

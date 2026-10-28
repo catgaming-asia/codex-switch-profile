@@ -83,7 +83,7 @@ private struct CodexCurrentBlock: View {
         let now = Date()
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("Codex", systemImage: "square.stack.3d.up.fill").font(.system(size: 13, weight: .semibold))
+                Label("Codex", systemImage: StatusItemIcon.symbolName).font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Toggle("Show in menu bar", isOn: $settings.showsCodexInMenuBar)
                     .toggleStyle(.checkbox).font(.system(size: 11))
@@ -109,7 +109,7 @@ private struct ClaudeCurrentBlock: View {
         let now = Date()
         VStack(alignment: .leading, spacing: 6) {
             HStack {
-                Label("Claude", systemImage: "sparkles").font(.system(size: 13, weight: .semibold))
+                Label("Claude", systemImage: StatusItemIcon.claudeSymbolName).font(.system(size: 13, weight: .semibold))
                 Spacer()
                 Toggle("Show in menu bar", isOn: $settings.showsClaudeInMenuBar)
                     .toggleStyle(.checkbox).font(.system(size: 11))
@@ -349,6 +349,7 @@ private struct ClaudeProfilesSection: View {
                 Button { settings.claudeProfilesExpanded.toggle() } label: {
                     HStack(spacing: 6) {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
+                        Image(systemName: StatusItemIcon.claudeSymbolName).font(.system(size: 13, weight: .medium)).frame(width: 18)
                         SectionHeader(title: "Claude profiles")
                     }
                     .contentShape(Rectangle())

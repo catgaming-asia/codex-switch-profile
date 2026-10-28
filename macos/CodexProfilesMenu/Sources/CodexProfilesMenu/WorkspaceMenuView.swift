@@ -76,7 +76,8 @@ final class WorkspaceMenuViewController: NSViewController {
         }
     }
     var onCollapseChange: ((Bool) -> Void)?
-    private let collapseButton = NSButton()
+    private let collapseChevron = NSImageView()
+    private let toggleArea = SectionToggleView()
     private var collapsibleViews: [NSView] = []
     private var toolbarTopConstraint: NSLayoutConstraint?
     private var contentTopConstraint: NSLayoutConstraint?
@@ -166,10 +167,10 @@ final class WorkspaceMenuViewController: NSViewController {
     }
 
     private func buildInterface() {
-        headerMark.symbolConfiguration = .init(pointSize: 18, weight: .medium)
+        headerMark.symbolConfiguration = .init(pointSize: 16, weight: .medium)
         headerMark.contentTintColor = .labelColor
-        headerMark.widthAnchor.constraint(equalToConstant: 22).isActive = true
-        headerTitle.font = .systemFont(ofSize: 14, weight: .semibold)
+        headerMark.widthAnchor.constraint(equalToConstant: 18).isActive = true
+        headerTitle.font = .systemFont(ofSize: 13, weight: .semibold)
         backButton.title = "Back"
         backButton.image = NSImage(systemSymbolName: "chevron.left", accessibilityDescription: nil)
         backButton.imagePosition = .imageLeading
@@ -179,12 +180,26 @@ final class WorkspaceMenuViewController: NSViewController {
         backButton.setAccessibilityLabel("Back to profiles")
         backButton.isHidden = true
         let settings = symbolButton("gearshape", title: "Options", action: #selector(showSettingsMenu(_:)))
-        collapseButton.isBordered = false
-        collapseButton.target = self
-        collapseButton.action = #selector(toggleCollapsed)
-        collapseButton.setAccessibilityLabel("Codex profiles")
-        collapseButton.widthAnchor.constraint(equalToConstant: 16).isActive = true
-        let header = NSStackView(views: [backButton, collapseButton, headerMark, headerTitle, NSView(), settings])
+        collapseChevron.symbolConfiguration = .init(pointSize: 10, weight: .semibold)
+        collapseChevron.contentTintColor = .labelColor
+        collapseChevron.widthAnchor.constraint(equalToConstant: 12).isActive = true
+        // The whole title area folds the section: chevron, icon, title and the empty space to the right.
+        let titleRow = NSStackView(views: [collapseChevron, headerMark, headerTitle])
+        titleRow.orientation = .horizontal
+        titleRow.alignment = .centerY
+        titleRow.spacing = 6
+        titleRow.translatesAutoresizingMaskIntoConstraints = false
+        toggleArea.addSubview(titleRow)
+        toggleArea.onToggle = { [weak self] in self?.toggleCollapsed() }
+        toggleArea.configure(label: "Codex profiles", hint: "Shows or hides the Codex profiles")
+        toggleArea.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        NSLayoutConstraint.activate([
+            titleRow.leadingAnchor.constraint(equalTo: toggleArea.leadingAnchor),
+            titleRow.centerYAnchor.constraint(equalTo: toggleArea.centerYAnchor),
+            titleRow.trailingAnchor.constraint(lessThanOrEqualTo: toggleArea.trailingAnchor),
+            toggleArea.heightAnchor.constraint(equalToConstant: 44),
+        ])
+        let header = NSStackView(views: [backButton, toggleArea, settings])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 8
@@ -257,7 +272,7 @@ final class WorkspaceMenuViewController: NSViewController {
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
         contentTopConstraint = contentContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8)
         footerHeightConstraint = footer.heightAnchor.constraint(equalToConstant: 38)
-        collapsibleViews = [toolbar, contentContainer, divider, footer]
+        collapsibleViews = [headerDivider, toolbar, contentContainer, divider, footer]
         [header, headerDivider, toolbar, contentContainer, divider, footer].forEach { view.addSubview($0) }
         NSLayoutConstraint.activate([
             toolbarHeightConstraint!,
@@ -291,9 +306,10 @@ final class WorkspaceMenuViewController: NSViewController {
         headerMark.isHidden = showingInfo
         headerTitle.stringValue = showingInfo ? "Account info" : "Codex Profiles"
         let collapsed = isCollapsed
-        collapseButton.image = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: nil)
-        collapseButton.setAccessibilityValue(collapsed ? "Collapsed" : "Expanded")
-        collapseButton.isHidden = showingInfo
+        collapseChevron.image = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: nil)
+        toggleArea.setAccessibilityValue(collapsed ? "Collapsed" : "Expanded")
+        collapseChevron.isHidden = showingInfo
+        toggleArea.isToggleEnabled = !showingInfo
         collapsibleViews.forEach { $0.isHidden = collapsed }
         toolbarTopConstraint?.constant = collapsed ? 0 : 10
         contentTopConstraint?.constant = collapsed ? 0 : 8
@@ -357,7 +373,7 @@ final class WorkspaceMenuViewController: NSViewController {
         }
     }
 
-    @objc private func toggleCollapsed() {
+    private func toggleCollapsed() {
         isCollapsed.toggle()
         onCollapseChange?(isCollapsed)
     }
@@ -1407,5 +1423,38 @@ final class QuotaMeter: NSView {
         // Keep any remaining quota visible as at least a dot.
         let width = fraction > 0 ? max(bounds.height, bounds.width * min(1, fraction)) : 0
         fill.frame = CGRect(x: 0, y: 0, width: width, height: bounds.height)
+    }
+}
+
+/// The clickable title area of a collapsible section header. Clicks on its
+/// icon, title and empty space all fold the section; sibling buttons stay separate.
+final class SectionToggleView: NSView {
+    var onToggle: (() -> Void)?
+    var isToggleEnabled = true
+
+    func configure(label: String, hint: String) {
+        setAccessibilityRole(.button)
+        setAccessibilityLabel(label)
+        setAccessibilityHelp(hint)
+    }
+
+    override var acceptsFirstResponder: Bool { isToggleEnabled }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+    override func isAccessibilityElement() -> Bool { isToggleEnabled }
+
+    override func mouseDown(with event: NSEvent) {
+        guard isToggleEnabled else { return super.mouseDown(with: event) }
+        onToggle?()
+    }
+
+    override func keyDown(with event: NSEvent) {
+        guard isToggleEnabled, event.characters == " " else { return super.keyDown(with: event) }
+        onToggle?()
+    }
+
+    override func accessibilityPerformPress() -> Bool {
+        guard isToggleEnabled else { return false }
+        onToggle?()
+        return true
     }
 }

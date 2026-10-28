@@ -345,25 +345,31 @@ private struct ClaudeProfilesSection: View {
     var body: some View {
         let expanded = settings.claudeProfilesExpanded
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
+            // Same geometry as the Codex header: 44 points tall, 14 leading and 10 trailing.
+            HStack(spacing: 8) {
                 Button { settings.claudeProfilesExpanded.toggle() } label: {
                     HStack(spacing: 6) {
-                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
-                        Image(systemName: StatusItemIcon.claudeSymbolName).font(.system(size: 13, weight: .medium)).frame(width: 18)
-                        SectionHeader(title: "Claude profiles")
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 12)
+                        Image(systemName: StatusItemIcon.claudeSymbolName).font(.system(size: 16, weight: .medium)).frame(width: 18)
+                        Text("Claude Profiles").font(.system(size: 13, weight: .semibold))
+                        Spacer(minLength: 0)
                     }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel("Claude profiles")
                 .accessibilityValue(expanded ? "Expanded" : "Collapsed")
                 .accessibilityHint("Shows or hides the Claude profiles")
-                Spacer()
                 if expanded && infoID == nil {
-                    Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus") }
+                    Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus").frame(minHeight: 28) }
                         .buttonStyle(.borderless).font(.system(size: 12))
                 }
             }
+            .frame(height: 44)
+            .padding(.leading, 14)
+            .padding(.trailing, 10)
+            if expanded { Divider() }
             // Collapsed content stays in the hierarchy at zero height so an open form keeps its fields.
             VStack(alignment: .leading, spacing: 8) {
                 if editorOpen {
@@ -389,13 +395,14 @@ private struct ClaudeProfilesSection: View {
                 Text("Switching changes new Claude Code sessions only. Running sessions and Claude Desktop are unchanged. Account profiles other than Default apply through Open in Terminal.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            .padding(.top, expanded ? 8 : 0)
+            .padding(.horizontal, 14)
+            .padding(.top, expanded ? 12 : 0)
+            .padding(.bottom, expanded ? 14 : 0)
             .frame(maxHeight: expanded ? .infinity : 0, alignment: .top)
             .clipped()
             .allowsHitTesting(expanded)
             .accessibilityHidden(!expanded)
         }
-        .padding(14)
         .frame(width: 400, alignment: .topLeading)
     }
 }

@@ -49,6 +49,35 @@ struct VerticalLayoutTests {
         await settle(controller)
         let collapsed = sectionHeights(controller)
         expect(collapsed[1] < 60 && collapsed[2] < 80, "collapsed sections must shrink to their headers: \(collapsed)")
+        // Both headers are 44 points tall and a click anywhere on the title row, including empty space, folds only its own section.
+        expect(collapsed[1] >= 43 && collapsed[1] <= 46 && collapsed[2] >= 43 && collapsed[2] <= 46, "headers must be 44 points tall: \(collapsed)")
+        let toggle = descendants(controller.view).compactMap { $0 as? SectionToggleView }.first!
+        let toggleFrame = toggle.convert(toggle.bounds, to: controller.view)
+        expect(abs(toggle.bounds.height - 44) < 1 && toggle.bounds.width > 250, "the Codex toggle area must span the header: \(toggle.bounds)")
+        let options = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.toolTip == "Options" }!
+        expect(!toggleFrame.intersects(options.convert(options.bounds, to: controller.view)), "Options must sit beside the toggle area, not inside it")
+        expect(options.bounds.width >= 28 && options.bounds.height >= 28, "Options needs a 28-point hit target")
+        func click(_ point: NSPoint, in source: NSView) {
+            let location = source.convert(point, to: nil)
+            for kind in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                let event = NSEvent.mouseEvent(with: kind, location: location, modifierFlags: [], timestamp: 0, windowNumber: window.windowNumber,
+                                               context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
+                // Deliver as AppKit would: to the view under the pointer, which passes unhandled clicks up its superviews.
+                window.contentView!.hitTest(window.contentView!.superview?.convert(location, from: nil) ?? location)?.perform(kind == .leftMouseDown ? #selector(NSResponder.mouseDown(with:)) : #selector(NSResponder.mouseUp(with:)), with: event)
+            }
+        }
+        let codexTitle = descendants(toggle).compactMap { $0 as? NSTextField }.first!
+        for point in [NSPoint(x: 6, y: toggle.bounds.midY), NSPoint(x: toggle.convert(NSPoint(x: codexTitle.bounds.midX, y: codexTitle.bounds.midY), from: codexTitle).x, y: toggle.bounds.midY),
+                      NSPoint(x: toggle.bounds.maxX - 20, y: toggle.bounds.midY), NSPoint(x: toggle.bounds.midX, y: 3)] {
+            let before = settings.codexProfilesExpanded
+            click(point, in: toggle)
+            expect(settings.codexProfilesExpanded != before && !settings.claudeProfilesExpanded, "clicking the Codex header at \(point) must toggle only Codex")
+        }
+        expect(!settings.codexProfilesExpanded, "four Codex header clicks must leave Codex collapsed")
+        click(NSPoint(x: options.bounds.midX, y: options.bounds.midY), in: options)
+        expect(!settings.codexProfilesExpanded, "the Options button must not toggle the section")
+        settings.claudeProfilesExpanded = false
+        await settle(controller)
         settings.codexProfilesExpanded = true
         settings.claudeProfilesExpanded = true
         await settle(controller)

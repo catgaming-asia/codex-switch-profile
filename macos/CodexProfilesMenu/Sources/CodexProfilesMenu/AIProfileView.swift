@@ -47,6 +47,34 @@ private struct SectionHeader: View {
     }
 }
 
+private struct CodexQuotaRow: View {
+    let window: RateLimitWindow
+    let now: Date
+
+    private var tint: Color {
+        switch window.level {
+        case .normal: return .green
+        case .low: return .orange
+        case .critical: return .red
+        }
+    }
+
+    var body: some View {
+        let reset = window.hasReset(at: now)
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(window.durationLabel.map { "\($0) window" } ?? "Window").font(.system(size: 12, weight: .medium))
+                Spacer()
+                Text(reset ? "Awaiting reading" : "\(window.remainingPercent)% left")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+            }
+            ProgressView(value: reset ? 0 : Double(window.remainingPercent), total: 100).tint(tint)
+            Text(window.resetDescription(at: now)).font(.system(size: 11)).foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct CodexCurrentBlock: View {
     @ObservedObject var model: CodexCurrentModel
     @ObservedObject var settings: AIProfileSettings
@@ -65,12 +93,7 @@ private struct CodexCurrentBlock: View {
                 .font(.system(size: 12)).foregroundStyle(.secondary)
             if case let .available(limits, _) = model.usage {
                 ForEach(Array(limits.windows.enumerated()), id: \.offset) { _, window in
-                    HStack {
-                        Text(window.durationLabel.map { "\($0) window" } ?? "Window").font(.system(size: 12))
-                        Spacer()
-                        Text(window.hasReset(at: now) ? "Awaiting reading" : "\(window.remainingPercent)% left")
-                            .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                    }
+                    CodexQuotaRow(window: window, now: now)
                 }
             } else {
                 Text("Usage unavailable").font(.system(size: 12)).foregroundStyle(.secondary)

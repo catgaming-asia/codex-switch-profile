@@ -10,6 +10,7 @@ and this project follows semantic versioning for tagged releases.
 ### Changed
 
 - The macOS menu app is now displayed and built as **AI Profile.app**. The bundle identifier, executable name and saved state are unchanged.
+- The macOS menu app's In use section now shows Codex 5h and weekly quota as progress bars with reset times, like Claude.
 
 ### Added
 

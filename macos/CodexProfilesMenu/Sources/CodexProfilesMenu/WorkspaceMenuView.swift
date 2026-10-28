@@ -57,6 +57,20 @@ final class WorkspaceMenuViewController: NSViewController {
     private var autoThresholdLabel: NSTextField?
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
     var onRequestClose: (() -> Void)?
+    /// The Codex profiles section folds to its header; the vertical panel persists the choice.
+    var isCollapsed = false {
+        didSet {
+            guard oldValue != isCollapsed, isViewLoaded else { return }
+            renderedList = nil
+            render()
+        }
+    }
+    var onCollapseChange: ((Bool) -> Void)?
+    private let collapseButton = NSButton()
+    private var collapsibleViews: [NSView] = []
+    private var toolbarTopConstraint: NSLayoutConstraint?
+    private var contentTopConstraint: NSLayoutConstraint?
+    private var footerHeightConstraint: NSLayoutConstraint?
     var onProfileNameVisibilityChange: (() -> Void)?
 
     private var hideProfileNames: Bool { defaults.bool(forKey: "hideProfileNames") }
@@ -155,7 +169,12 @@ final class WorkspaceMenuViewController: NSViewController {
         backButton.setAccessibilityLabel("Back to profiles")
         backButton.isHidden = true
         let settings = symbolButton("gearshape", title: "Options", action: #selector(showSettingsMenu(_:)))
-        let header = NSStackView(views: [backButton, headerMark, headerTitle, NSView(), settings])
+        collapseButton.isBordered = false
+        collapseButton.target = self
+        collapseButton.action = #selector(toggleCollapsed)
+        collapseButton.setAccessibilityLabel("Codex profiles")
+        collapseButton.widthAnchor.constraint(equalToConstant: 16).isActive = true
+        let header = NSStackView(views: [backButton, collapseButton, headerMark, headerTitle, NSView(), settings])
         header.orientation = .horizontal
         header.alignment = .centerY
         header.spacing = 8
@@ -184,6 +203,7 @@ final class WorkspaceMenuViewController: NSViewController {
         [profilePicker, NSView(), destinationPicker].forEach { toolbar.addArrangedSubview($0) }
         toolbar.translatesAutoresizingMaskIntoConstraints = false
         toolbarHeightConstraint = toolbar.heightAnchor.constraint(equalToConstant: 24)
+        toolbarTopConstraint = toolbar.topAnchor.constraint(equalTo: headerDivider.bottomAnchor, constant: 10)
 
         let divider = NSBox()
         divider.boxType = .separator
@@ -225,6 +245,9 @@ final class WorkspaceMenuViewController: NSViewController {
         footer.spacing = 8
         footer.translatesAutoresizingMaskIntoConstraints = false
         contentContainer.translatesAutoresizingMaskIntoConstraints = false
+        contentTopConstraint = contentContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8)
+        footerHeightConstraint = footer.heightAnchor.constraint(equalToConstant: 38)
+        collapsibleViews = [toolbar, contentContainer, divider, footer]
         [header, headerDivider, toolbar, contentContainer, divider, footer].forEach { view.addSubview($0) }
         NSLayoutConstraint.activate([
             toolbarHeightConstraint!,
@@ -234,10 +257,10 @@ final class WorkspaceMenuViewController: NSViewController {
             header.heightAnchor.constraint(equalToConstant: 44),
             headerDivider.topAnchor.constraint(equalTo: header.bottomAnchor),
             headerDivider.leadingAnchor.constraint(equalTo: view.leadingAnchor), headerDivider.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            toolbar.topAnchor.constraint(equalTo: headerDivider.bottomAnchor, constant: 10),
+            toolbarTopConstraint!,
             toolbar.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             toolbar.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -14),
-            contentContainer.topAnchor.constraint(equalTo: toolbar.bottomAnchor, constant: 8),
+            contentTopConstraint!,
             contentContainer.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             contentContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             contentContainer.bottomAnchor.constraint(equalTo: divider.topAnchor),
@@ -245,7 +268,7 @@ final class WorkspaceMenuViewController: NSViewController {
             divider.bottomAnchor.constraint(equalTo: footer.topAnchor),
             footer.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 14),
             footer.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -10),
-            footer.bottomAnchor.constraint(equalTo: view.bottomAnchor), footer.heightAnchor.constraint(equalToConstant: 38),
+            footer.bottomAnchor.constraint(equalTo: view.bottomAnchor), footerHeightConstraint!,
         ])
     }
 
@@ -257,7 +280,15 @@ final class WorkspaceMenuViewController: NSViewController {
         backButton.isHidden = !showingInfo
         headerMark.isHidden = showingInfo
         headerTitle.stringValue = showingInfo ? "Account info" : "Codex Profiles"
-        toolbar.isHidden = !populated || showingInfo
+        let collapsed = isCollapsed
+        collapseButton.image = NSImage(systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: nil)
+        collapseButton.setAccessibilityValue(collapsed ? "Collapsed" : "Expanded")
+        collapseButton.isHidden = showingInfo
+        collapsibleViews.forEach { $0.isHidden = collapsed }
+        toolbarTopConstraint?.constant = collapsed ? 0 : 10
+        contentTopConstraint?.constant = collapsed ? 0 : 8
+        footerHeightConstraint?.constant = collapsed ? 0 : 38
+        toolbar.isHidden = collapsed || !populated || showingInfo
         toolbarHeightConstraint?.constant = toolbar.isHidden ? 0 : 24
         addButton.isHidden = !populated || showingInfo || store.profiles.isEmpty
         addProfileButton.isHidden = !populated || showingInfo
@@ -301,7 +332,8 @@ final class WorkspaceMenuViewController: NSViewController {
             ?? contentContainer.subviews.first.map { $0.fittingSize.height + 24 } ?? 100
         // Header, filter, separators and footer occupy 126 points; the info page omits the filter.
         let fixedHeight: CGFloat = showingInfo ? 102 : 126
-        let height: CGFloat = populated ? min(500, max(showingInfo ? 300 : 260, fixedHeight + contentHeight)) : 260
+        // Collapsed: the 44-point header, its separator and the 1-point body separator.
+        let height: CGFloat = collapsed ? 46 : populated ? min(500, max(showingInfo ? 300 : 260, fixedHeight + contentHeight)) : 260
         heightConstraint?.constant = height
         preferredContentSize = NSSize(width: 400, height: height)
         onPreferredContentSizeChange?(preferredContentSize)
@@ -311,6 +343,11 @@ final class WorkspaceMenuViewController: NSViewController {
             scrollView.contentView.scroll(to: NSPoint(x: 0, y: min(scrollPosition.y, maxY)))
             scrollView.reflectScrolledClipView(scrollView.contentView)
         }
+    }
+
+    @objc private func toggleCollapsed() {
+        isCollapsed.toggle()
+        onCollapseChange?(isCollapsed)
     }
 
     private func listModel(for targets: [LaunchTarget]) -> ListModel {

@@ -38,12 +38,19 @@ struct VerticalLayoutTests {
         let profiles = ClaudeProfileStore(directory: root.appendingPathComponent("claude"), claudeDirectory: root.appendingPathComponent(".claude"),
                                           secrets: MemorySecrets())
         let codex = WorkspaceMenuViewController(store: store, defaults: defaults)
-        let controller = AIProfileViewController(codex: codex, store: store, settings: AIProfileSettings(defaults: defaults),
+        let settings = AIProfileSettings(defaults: defaults)
+        expect(!settings.codexProfilesExpanded && !settings.claudeProfilesExpanded, "both profile sections must default to collapsed")
+        let controller = AIProfileViewController(codex: codex, store: store, settings: settings,
                                                  claude: claude, profiles: profiles)
         let window = NSWindow(contentViewController: controller)
         controller.onPreferredContentSizeChange = { window.setContentSize($0) }
         window.setContentSize(controller.preferredContentSize)
 
+        await settle(controller)
+        let collapsed = sectionHeights(controller)
+        expect(collapsed[1] < 60 && collapsed[2] < 80, "collapsed sections must shrink to their headers: \(collapsed)")
+        settings.codexProfilesExpanded = true
+        settings.claudeProfilesExpanded = true
         await settle(controller)
         let entry = check("entry", controller)
         await claude.refresh(force: true)
@@ -54,6 +61,13 @@ struct VerticalLayoutTests {
         await settle(controller)
         let added = check("profile added", controller)
         expect(added.document > loaded.document, "the document must grow when a Claude profile is added")
+        settings.claudeProfilesExpanded = false
+        await settle(controller)
+        let claudeFolded = sectionHeights(controller)
+        expect(claudeFolded[2] < 80 && claudeFolded[1] > 200, "folding Claude must not fold Codex: \(claudeFolded)")
+        expect(!settings.claudeProfilesExpanded && settings.codexProfilesExpanded, "each section keeps its own state")
+        let reopened = AIProfileSettings(defaults: defaults)
+        expect(reopened.codexProfilesExpanded && !reopened.claudeProfilesExpanded, "section state must persist in defaults")
         print("Vertical layout smoke passed.")
     }
 
@@ -62,6 +76,13 @@ struct VerticalLayoutTests {
             try? await Task.sleep(nanoseconds: 100_000_000)
             controller.view.layoutSubtreeIfNeeded()
         }
+    }
+
+    private static func sectionHeights(_ controller: AIProfileViewController) -> [CGFloat] {
+        let scroll = descendants(controller.view).compactMap { $0 as? NSScrollView }.first!
+        let stack = scroll.documentView!.subviews.first as! NSStackView
+        let sections = stack.arrangedSubviews.enumerated().filter { $0.offset % 2 == 0 }.map(\.element)
+        return sections.map { $0.frame.height }
     }
 
     /// Verifies the rects of the three sections and returns the document and viewport heights.

@@ -191,6 +191,13 @@ final class AIProfileSettings: ObservableObject {
     @Published var showsClaudeInMenuBar: Bool {
         didSet { defaults.set(showsClaudeInMenuBar, forKey: "menuBarShowsClaude"); onMenuBarChange?() }
     }
+    /// Profile sections start collapsed until the user opens them; each choice is remembered separately.
+    @Published var codexProfilesExpanded: Bool {
+        didSet { defaults.set(codexProfilesExpanded, forKey: "codexProfilesExpanded") }
+    }
+    @Published var claudeProfilesExpanded: Bool {
+        didSet { defaults.set(claudeProfilesExpanded, forKey: "claudeProfilesExpanded") }
+    }
     var onMenuBarChange: (() -> Void)?
 
     init(defaults: UserDefaults = .standard) {
@@ -199,6 +206,8 @@ final class AIProfileSettings: ObservableObject {
         let legacy = defaults.string(forKey: "menuBarProvider")
         showsCodexInMenuBar = defaults.object(forKey: "menuBarShowsCodex") as? Bool ?? (legacy != "claude")
         showsClaudeInMenuBar = defaults.object(forKey: "menuBarShowsClaude") as? Bool ?? (legacy == "claude")
+        codexProfilesExpanded = defaults.bool(forKey: "codexProfilesExpanded")
+        claudeProfilesExpanded = defaults.bool(forKey: "claudeProfilesExpanded")
     }
 }
 

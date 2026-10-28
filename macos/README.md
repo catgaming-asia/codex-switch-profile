@@ -94,7 +94,7 @@ you explicitly started **Add workspace…**.
 
 ## Claude profiles
 
-The menu is one scrolling panel: **In use** shows the current Codex and Claude account with usage and a "Show in menu bar" checkbox for each (both, either or neither; Auto Codex stays a separate Codex setting), then **Codex profiles**, then **Claude profiles**.
+The menu is one scrolling panel: **In use** shows the current Codex and Claude account with usage and a "Show in menu bar" checkbox for each (both, either or neither; Auto Codex stays a separate Codex setting), then **Codex profiles**, then **Claude profiles**. The two profile sections start collapsed; click the chevron in a header to expand one, and the app remembers each choice.
 
 - **Account** profiles run Claude Code with their own `CLAUDE_CONFIG_DIR` under `~/Library/Application Support/AI Profile/claude/accounts`. Choose **Sign in…** to run `claude auth login` for that profile in Terminal. The built-in **Default account** is your normal `~/.claude` login.
 - **API** profiles hold an endpoint, optional model and an API key. The key is stored only in Keychain; Claude Code reads it through `apiKeyHelper`. No request is sent to test it, and no quota is shown for API profiles.

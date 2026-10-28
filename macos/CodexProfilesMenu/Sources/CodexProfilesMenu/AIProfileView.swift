@@ -287,37 +287,59 @@ private struct ClaudeProfileForm: View {
 
 private struct ClaudeProfilesSection: View {
     @ObservedObject var store: ClaudeProfileStore
+    @ObservedObject var settings: AIProfileSettings
     let emails: (ClaudeProfile) -> String?
     @State private var editorOpen = false
     @State private var editing: ClaudeProfile?
     @State private var error: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let expanded = settings.claudeProfilesExpanded
+        VStack(alignment: .leading, spacing: 0) {
             HStack {
-                SectionHeader(title: "Claude profiles")
+                Button { settings.claudeProfilesExpanded.toggle() } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right").font(.system(size: 10, weight: .semibold)).frame(width: 10)
+                        SectionHeader(title: "Claude profiles")
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Claude profiles")
+                .accessibilityValue(expanded ? "Expanded" : "Collapsed")
+                .accessibilityHint("Shows or hides the Claude profiles")
                 Spacer()
-                Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus") }
-                    .buttonStyle(.borderless).font(.system(size: 12))
-            }
-            if editorOpen {
-                ClaudeProfileForm(store: store, editing: editing) { editorOpen = false }
-                    .id(editing?.id ?? "new")
-            } else {
-                ForEach(store.profiles) { profile in
-                    ClaudeProfileRow(profile: profile, store: store, accountEmail: emails(profile),
-                                     edit: { editing = profile; editorOpen = true }) { error = $0 }
+                if expanded {
+                    Button { editing = nil; editorOpen = true } label: { Label("Add", systemImage: "plus") }
+                        .buttonStyle(.borderless).font(.system(size: 12))
                 }
             }
-            if let error {
-                HStack(alignment: .top) {
-                    Text(error).font(.system(size: 11)).foregroundStyle(.red)
-                    Spacer()
-                    Button("Dismiss") { self.error = nil }.buttonStyle(.borderless).font(.system(size: 11))
+            // Collapsed content stays in the hierarchy at zero height so an open form keeps its fields.
+            VStack(alignment: .leading, spacing: 8) {
+                if editorOpen {
+                    ClaudeProfileForm(store: store, editing: editing) { editorOpen = false }
+                        .id(editing?.id ?? "new")
+                } else {
+                    ForEach(store.profiles) { profile in
+                        ClaudeProfileRow(profile: profile, store: store, accountEmail: emails(profile),
+                                         edit: { editing = profile; editorOpen = true }) { error = $0 }
+                    }
                 }
+                if let error {
+                    HStack(alignment: .top) {
+                        Text(error).font(.system(size: 11)).foregroundStyle(.red)
+                        Spacer()
+                        Button("Dismiss") { self.error = nil }.buttonStyle(.borderless).font(.system(size: 11))
+                    }
+                }
+                Text("Switching changes new Claude Code sessions only. Running sessions and Claude Desktop are unchanged. Account profiles other than Default apply through Open in Terminal.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
             }
-            Text("Switching changes new Claude Code sessions only. Running sessions and Claude Desktop are unchanged. Account profiles other than Default apply through Open in Terminal.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            .padding(.top, expanded ? 8 : 0)
+            .frame(maxHeight: expanded ? .infinity : 0, alignment: .top)
+            .clipped()
+            .allowsHitTesting(expanded)
+            .accessibilityHidden(!expanded)
         }
         .padding(14)
         .frame(width: 400, alignment: .topLeading)
@@ -370,10 +392,12 @@ final class AIProfileViewController: NSViewController {
             guard let self else { return }
             Task { await self.claude.refresh(force: true) }
         })
-        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles) { [weak self] profile in
+        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles, settings: settings) { [weak self] profile in
             guard let self, profile.kind == .account else { return nil }
             return self.claudeEmail(in: self.profiles.accountDirectory(for: profile))
         })
+        codex.isCollapsed = !settings.codexProfilesExpanded
+        codex.onCollapseChange = { [weak self] collapsed in self?.settings.codexProfilesExpanded = !collapsed }
         addChild(codex)
         stack.orientation = .vertical
         stack.alignment = .width
@@ -415,6 +439,13 @@ final class AIProfileViewController: NSViewController {
         codexStore.onChange = { [weak self] in previousChange?(); self?.refreshCurrent() }
         let previousUsage = codexStore.onStatusUsageChange
         codexStore.onStatusUsageChange = { [weak self] in previousUsage?(); self?.refreshCurrent() }
+        settings.objectWillChange.sink { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.codex.isCollapsed = !self.settings.codexProfilesExpanded
+                self.relayout()
+            }
+        }.store(in: &subscriptions)
         profiles.objectWillChange.sink { [weak self] in Task { @MainActor in self?.relayout() } }.store(in: &subscriptions)
         refreshCurrent()
         relayout()

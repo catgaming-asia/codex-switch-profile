@@ -92,6 +92,15 @@ Profile-only launches start in the home directory. Adding a project shortcut
 is a separate action; creating a profile never opens a folder picker unless
 you explicitly started **Add workspace…**.
 
+## Claude profiles
+
+The menu is one scrolling panel: **In use** shows the current Codex and Claude account with usage and a "Show in menu bar" checkbox for each (both, either or neither; Auto Codex stays a separate Codex setting), then **Codex profiles**, then **Claude profiles**.
+
+- **Account** profiles run Claude Code with their own `CLAUDE_CONFIG_DIR` under `~/Library/Application Support/AI Profile/claude/accounts`. Choose **Sign in…** to run `claude auth login` for that profile in Terminal. The built-in **Default account** is your normal `~/.claude` login.
+- **API** profiles hold an endpoint, optional model and an API key. The key is stored only in Keychain; Claude Code reads it through `apiKeyHelper`. No request is sent to test it, and no quota is shown for API profiles.
+- **Switch** on an API profile writes `ANTHROPIC_BASE_URL`, `ANTHROPIC_MODEL` and `apiKeyHelper` into `~/.claude/settings.json`, keeping every other setting. A private backup is saved in `AI Profile/claude/backups` first, and switching to an account profile restores your previous values. Switching to a non-default account profile restores the default settings and marks it current; it applies to Claude Code started with **Open in Terminal**, because Claude Code reads one account per config folder.
+- Changes affect new Claude Code sessions only. Running sessions and the Claude Desktop account are not changed.
+
 ## Codex usage beside each profile
 
 The **Codex left** column shows the percentage remaining in each reported

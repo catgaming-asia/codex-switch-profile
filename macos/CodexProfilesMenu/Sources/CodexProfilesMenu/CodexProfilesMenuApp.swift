@@ -141,13 +141,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             ? claudeSnapshot?.menuBarText(at: now)
             : DefaultMenuBarQuota(reading: store.usage["default"], at: now).text
         let namesHidden = UserDefaults.standard.bool(forKey: "hideProfileNames")
-        let label = namesHidden || showsClaude ? "AI profile" : indicator.accessibilityLabel(at: now)
-        button.image = StatusItemIcon.image(for: indicator.level, accessibilityDescription: label)
+        let label = namesHidden ? "AI profile" : showsClaude ? "AI Profile (Claude)" : indicator.accessibilityLabel(at: now)
+        button.image = StatusItemIcon.image(
+            for: showsClaude ? claudeSnapshot?.menuBarLevel(at: now) ?? .normal : indicator.level,
+            symbolName: showsClaude ? StatusItemIcon.claudeSymbolName : StatusItemIcon.symbolName,
+            accessibilityDescription: label)
         button.imagePosition = .imageLeading
         button.font = .monospacedDigitSystemFont(ofSize: 11, weight: .medium)
         button.title = quota ?? ""
         statusItem?.length = quota == nil ? NSStatusItem.squareLength : NSStatusItem.variableLength
-        button.toolTip = namesHidden || showsClaude ? "AI profile" : indicator.toolTip(at: now)
+        button.toolTip = namesHidden ? "AI profile" : showsClaude ? "AI Profile: Claude" : indicator.toolTip(at: now)
         button.setAccessibilityLabel(quota.map { "\(label). Default \(showsClaude ? "Claude" : "Codex") quota: \($0)" } ?? label)
     }
 

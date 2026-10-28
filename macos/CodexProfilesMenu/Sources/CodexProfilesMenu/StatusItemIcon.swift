@@ -6,12 +6,13 @@ import AppKit
 /// exclamation mark when critical.
 enum StatusItemIcon {
     static let symbolName = "square.stack.3d.up.fill"
+    static let claudeSymbolName = "sparkles"
     /// The badge sits in the bottom-right corner on whole points. Its odd
     /// diameter centres a one-point column on pixel boundaries, so the
     /// exclamation mark stays crisp on a 1x menu bar.
     static let badgeDiameter: CGFloat = 9
 
-    static func image(for level: QuotaLevel, accessibilityDescription: String) -> NSImage {
+    static func image(for level: QuotaLevel, symbolName: String = StatusItemIcon.symbolName, accessibilityDescription: String) -> NSImage {
         let base = NSImage(systemSymbolName: symbolName, accessibilityDescription: accessibilityDescription)
             ?? NSImage(size: NSSize(width: 16, height: 18))
         base.isTemplate = true

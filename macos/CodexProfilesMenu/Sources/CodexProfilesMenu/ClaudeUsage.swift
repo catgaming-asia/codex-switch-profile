@@ -38,6 +38,11 @@ struct ClaudeSnapshot: Equatable, Sendable {
     let windows: [ClaudeQuotaWindow]
     let checkedAt: Date
 
+    /// Lowest remaining level among the live five-hour and weekly windows.
+    func menuBarLevel(at now: Date) -> QuotaLevel {
+        windows.filter { ["five_hour", "seven_day"].contains($0.id) && !$0.hasReset(at: now) }.map(\.level).max() ?? .normal
+    }
+
     /// Compact menu-bar text such as "5h 76% · W 69%", from real windows only.
     func menuBarText(at now: Date) -> String? {
         let parts = [("five_hour", "5h"), ("seven_day", "W")].compactMap { id, label -> String? in

@@ -67,6 +67,8 @@ final class WorkspaceMenuViewController: NSViewController {
     private var autoThresholdLabel: NSTextField?
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
     var onRequestClose: (() -> Void)?
+    /// Reopens the menu after a dialog that had to close it, so the result is visible.
+    var onRequestShow: (() -> Void)?
     /// The Codex profiles section folds to its header; the vertical panel persists the choice.
     var isCollapsed = false {
         didSet {
@@ -946,6 +948,9 @@ final class WorkspaceMenuViewController: NSViewController {
     @objc private func createProfileForWorkspace() { promptForProfile(addingWorkspace: true) }
 
     private func promptForProfile(addingWorkspace: Bool) {
+        // A transient popover left open behind the modal and its file picker is
+        // dismissed half-way and keeps the old list; close it and reopen it after.
+        onRequestClose?()
         let alert = NSAlert()
         alert.messageText = "Create a profile"
         alert.informativeText = "Choose a name. Optionally select auth.json to sign in to Codex CLI and load its usage. The ChatGPT window may still ask you to sign in."
@@ -983,8 +988,9 @@ final class WorkspaceMenuViewController: NSViewController {
             if await store.createProfile(name, authFile: authFile) {
                 selectedID = nil
                 store.query = ""
-                store.selectedProfile = name
-                if addingWorkspace { chooseFolder(for: name) }
+                // Show the full list with the new profile in it, not a filter of one.
+                store.selectedProfile = nil
+                if addingWorkspace { chooseFolder(for: name) } else { onRequestShow?() }
                 await store.refreshUsage()
             }
         }

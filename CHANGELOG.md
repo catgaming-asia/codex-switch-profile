@@ -19,6 +19,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Fixed
 
+- The macOS menu's **Add profile…** now closes the menu while its dialog and auth.json picker are open, then reopens it with the refreshed list. Previously the new profile only appeared after reopening the menu, and the list was filtered to that one profile.
 - A Claude profile's info page in the macOS menu now shows the plan only for the current account profile, so viewing Default no longer shows the plan of a different signed-in account.
 - The macOS menu's In use, Codex profiles and Claude profiles sections now share one vertical scroll area. The Codex list no longer scrolls separately inside a 500-point box, so the mouse wheel works over the whole panel.
 - The macOS menu's **Switch** and ChatGPT launches now use the Desktop bundle that is running when both ChatGPT.app and Codex.app are installed. Previously a stale ChatGPT.app was chosen first, so the running app was never quit or reopened. An explicit `CHATGPT_APP`, `CODEX_APP` or `CODEX_APP_BIN` still takes priority, and the first installed app is used when none is running.

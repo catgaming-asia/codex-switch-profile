@@ -486,6 +486,44 @@ struct MenuInteractionTests {
         expect(observedSignal?.remainingPercent == 4,
             "the session listener must deliver quota changes from an active session without a network poll")
         sessionMonitor.stop()
+
+        // Add profile closes the transient menu for its dialog, then reopens it
+        // showing the full list with the new profile, not a stale or filtered one.
+        let profileList = root.appendingPathComponent("profile-list")
+        try Data("default\n".utf8).write(to: profileList)
+        let createCLI = root.appendingPathComponent("create-cli")
+        try Data("""
+            #!/bin/sh
+            case "$1" in
+              init) printf '%s\\n' "$2" >> '\(profileList.path)' ;;
+              list) cat '\(profileList.path)' ;;
+              workspace) printf '{"guard_mode":"warn","bindings":[]}\\n' ;;
+            esac
+            """.utf8).write(to: createCLI)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: createCLI.path)
+        let createStore = WorkspaceStore(client: CLIClient(executableURL: createCLI), defaults: defaults)
+        await createStore.refresh()
+        createStore.selectedProfile = "default"
+        let createController = WorkspaceMenuViewController(store: createStore, defaults: defaults)
+        var createEvents: [String] = []
+        createController.onRequestClose = { createEvents.append("close") }
+        createController.onRequestShow = { createEvents.append("show") }
+        let fillDialog = Timer(timeInterval: 0.3, repeats: false) { _ in
+            MainActor.assumeIsolated {
+                let dialog = app.modalWindow!.contentView!
+                descendants(dialog).compactMap { $0 as? NSTextField }.first { $0.isEditable }!.stringValue = "phu"
+                descendants(dialog).compactMap { $0 as? NSButton }.first { $0.title == "Create profile" }!.performClick(nil)
+            }
+        }
+        RunLoop.main.add(fillDialog, forMode: .common)
+        createController.perform(NSSelectorFromString("createProfile"))
+        expect(createEvents == ["close"], "Add profile must close the menu before its dialog: \(createEvents)")
+        for _ in 0..<40 where !createEvents.contains("show") {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        let createdRows = descendants(createController.view).compactMap { $0 as? LaunchRowButton }.map(\.item)
+        expect(createEvents == ["close", "show"] && createStore.selectedProfile == nil && createdRows == [.profile("default"), .profile("phu")],
+            "a created profile must reopen the menu listing every profile: \(createEvents) \(createdRows)")
         print("Native menu interaction tests passed.")
     }
 

@@ -37,6 +37,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         let codexController = WorkspaceMenuViewController(store: store, alerts: alerts)
         codexController.onRequestClose = { [weak self] in self?.popover.performClose(nil) }
+        codexController.onRequestShow = { [weak self] in self?.showMenu() }
         codexController.onProfileNameVisibilityChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)

@@ -57,7 +57,61 @@ struct ClaudeUsageTests {
         gate.open()
         await stale.value
         expect(racing.state == .unavailable(.rateLimited) && !racing.isRefreshing, "stale reading is dropped")
+        await renewalSmoke(usage: usage)
         print("Claude usage smoke tests passed.")
+    }
+
+    /// An idle account's expired token is renewed and stored back, keeping the
+    /// rest of the credential; a busy lock or a refused renewal changes nothing.
+    private static func renewalSmoke(usage: Data) async {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("claude-renewal-\(UUID().uuidString)")
+        try! FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent(".credentials.json")
+        let expired = Data(#"{"claudeAiOauth":{"accessToken":"old-access","refreshToken":"old-refresh","expiresAt":1000,"scopes":["user:inference","user:profile"],"subscriptionType":"max"},"mcpOAuth":{"server":"kept"}}"#.utf8)
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubProtocol.self]
+        let session = URLSession(configuration: configuration)
+        let client = ClaudeUsageClient(session: session, configDirectory: directory,
+                                       renewal: ClaudeTokenRenewal(session: session))
+        let now = Date()
+
+        try! expired.write(to: file)
+        StubProtocol.reset(tokenStatus: 200, tokenBody: #"{"access_token":"new-access","refresh_token":"new-refresh","expires_in":28800,"scope":"user:inference user:profile"}"#, usage: usage)
+        guard case .available = await client.fetch(now: now) else { return fail("an expired token must be renewed and quota loaded") }
+        let sent = (try? JSONSerialization.jsonObject(with: StubProtocol.tokenRequests.first ?? Data())) as? [String: String]
+        expect(sent == ["grant_type": "refresh_token", "refresh_token": "old-refresh",
+                        "client_id": ClaudeTokenRenewal.clientID, "scope": "user:inference user:profile"], "refresh request matches Claude Code: \(sent ?? [:])")
+        expect(StubProtocol.usageTokens == ["Bearer new-access"], "usage must use the renewed token")
+        let stored = (try! JSONSerialization.jsonObject(with: Data(contentsOf: file))) as! [String: Any]
+        let oauth = stored["claudeAiOauth"] as! [String: Any]
+        expect(oauth["accessToken"] as? String == "new-access" && oauth["refreshToken"] as? String == "new-refresh"
+            && (oauth["expiresAt"] as? NSNumber)?.doubleValue == ((now.timeIntervalSince1970 + 28800) * 1000).rounded(.down)
+            && oauth["subscriptionType"] as? String == "max"
+            && (stored["mcpOAuth"] as? [String: String]) == ["server": "kept"], "renewal must store the new token and keep every other field")
+        let mode = (try! FileManager.default.attributesOfItem(atPath: file.path)[.posixPermissions] as! NSNumber).intValue
+        expect(mode == 0o600, "the stored credential stays private")
+        let leftovers = try! FileManager.default.contentsOfDirectory(atPath: directory.path).filter { $0 != ".credentials.json" }
+        expect(leftovers.isEmpty && !FileManager.default.fileExists(atPath: directory.path + ".lock"), "locks are released: \(leftovers)")
+
+        // Claude Code holds its refresh lock: wait for it, never refresh alongside it.
+        try! expired.write(to: file)
+        StubProtocol.reset(tokenStatus: 200, tokenBody: "{}", usage: usage)
+        let lock = directory.appendingPathComponent(".oauth_refresh.lock")
+        try! FileManager.default.createDirectory(at: lock, withIntermediateDirectories: false)
+        expect(await client.fetch(now: now) == .unavailable(.signInExpired) && StubProtocol.tokenRequests.isEmpty
+            && (try! Data(contentsOf: file)) == expired && FileManager.default.fileExists(atPath: lock.path),
+            "a busy refresh lock must leave the credential and the other holder's lock alone")
+        try! FileManager.default.removeItem(at: lock)
+
+        // A refused renewal reports the sign-in as expired and keeps the stored credential.
+        StubProtocol.reset(tokenStatus: 400, tokenBody: #"{"error":"invalid_grant"}"#, usage: usage)
+        expect(await client.fetch(now: now) == .unavailable(.signInExpired) && StubProtocol.tokenRequests.count == 1
+            && (try! Data(contentsOf: file)) == expired, "a refused renewal must not change the credential")
+    }
+
+    private static func fail(_ message: String) {
+        fatalError(message)
     }
 
     private static func expect(_ condition: Bool, _ message: String) {
@@ -73,4 +127,49 @@ final class ReadingGate: @unchecked Sendable {
         await withCheckedContinuation { next in lock.lock(); continuation = next; lock.unlock() }
     }
     func open() { lock.lock(); let next = continuation; continuation = nil; lock.unlock(); next?.resume() }
+}
+
+/// Answers the token and usage endpoints in process and records what was sent.
+final class StubProtocol: URLProtocol, @unchecked Sendable {
+    nonisolated(unsafe) static var tokenStatus = 200
+    nonisolated(unsafe) static var tokenBody = Data()
+    nonisolated(unsafe) static var usage = Data()
+    nonisolated(unsafe) static var tokenRequests: [Data] = []
+    nonisolated(unsafe) static var usageTokens: [String] = []
+
+    static func reset(tokenStatus: Int, tokenBody: String, usage: Data) {
+        self.tokenStatus = tokenStatus
+        self.tokenBody = Data(tokenBody.utf8)
+        self.usage = usage
+        tokenRequests = []
+        usageTokens = []
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func stopLoading() {}
+
+    override func startLoading() {
+        let isToken = request.url?.path == "/v1/oauth/token"
+        if isToken {
+            var body = request.httpBody ?? Data()
+            if let stream = request.httpBodyStream {
+                stream.open()
+                var buffer = [UInt8](repeating: 0, count: 4096)
+                while stream.hasBytesAvailable {
+                    let count = stream.read(&buffer, maxLength: buffer.count)
+                    guard count > 0 else { break }
+                    body.append(buffer, count: count)
+                }
+                stream.close()
+            }
+            Self.tokenRequests.append(body)
+        } else {
+            Self.usageTokens.append(request.value(forHTTPHeaderField: "Authorization") ?? "")
+        }
+        let response = HTTPURLResponse(url: request.url!, statusCode: isToken ? Self.tokenStatus : 200, httpVersion: nil, headerFields: nil)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: isToken ? Self.tokenBody : Self.usage)
+        client?.urlProtocolDidFinishLoading(self)
+    }
 }

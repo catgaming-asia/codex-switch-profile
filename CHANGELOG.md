@@ -19,6 +19,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Fixed
 
+- The macOS menu no longer reports "Claude Code sign-in expired" while you are still signed in. Claude Code renews its access token only while it runs, so the stored token lapsed whenever Claude Code was idle; the menu now renews it with the stored refresh token, using Claude Code's own locks, and saves it back where Claude Code keeps it.
 - The macOS menu's **Add profile…** now closes the menu while its dialog and auth.json picker are open, then reopens it with the refreshed list. Previously the new profile only appeared after reopening the menu, and the list was filtered to that one profile.
 - A Claude profile's info page in the macOS menu now shows the plan only for the current account profile, so viewing Default no longer shows the plan of a different signed-in account.
 - The macOS menu's In use, Codex profiles and Claude profiles sections now share one vertical scroll area. The Codex list no longer scrolls separately inside a 500-point box, so the mouse wheel works over the whole panel.

@@ -96,13 +96,15 @@ struct ClaudeCredential: Sendable {
 
 /// Reads the signed-in Claude Code account and its subscription quota. The
 /// token is read at run time, held in memory for one request, and never
-/// logged or stored. Only Anthropic's own usage endpoint is contacted.
+/// logged. An expired token is renewed and stored back where Claude Code keeps
+/// it (see `ClaudeTokenRenewal`). Only Anthropic's own endpoints are contacted.
 struct ClaudeUsageClient: Sendable {
     var session: URLSession = .shared
     var homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
     /// A profile's private `CLAUDE_CONFIG_DIR`; nil reads the default `~/.claude` account.
     var configDirectory: URL?
     var usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+    var renewal = ClaudeTokenRenewal()
 
     func parseCredential(_ data: Data) -> ClaudeCredential? {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
@@ -136,18 +138,27 @@ struct ClaudeUsageClient: Sendable {
     func fetch(now: Date = Date()) async -> ClaudeUsageState {
         let home = homeDirectory
         let custom = configDirectory
+        // Claude Code suffixes the Keychain service with a hash of a custom config directory.
+        let location = ClaudeCredentialLocation(
+            configDirectory: custom ?? home.appendingPathComponent(".claude"),
+            service: custom.map { "Claude Code-credentials-" + SHA256.hash(data: Data($0.path.utf8)).map { String(format: "%02x", $0) }.joined().prefix(8) }
+                ?? "Claude Code-credentials")
         let loaded = await Task.detached(priority: .utility) { () -> (ClaudeCredential?, Data?) in
-            // Claude Code suffixes the Keychain service with a hash of a custom config directory.
-            let service = custom.map { "Claude Code-credentials-" + SHA256.hash(data: Data($0.path.utf8)).map { String(format: "%02x", $0) }.joined().prefix(8) }
-                ?? "Claude Code-credentials"
-            let keychain = runCapturing("/usr/bin/security", ["find-generic-password", "-s", service, "-w"])
-            let file = try? Data(contentsOf: (custom ?? home.appendingPathComponent(".claude")).appendingPathComponent(".credentials.json"))
-            let credential = (keychain.flatMap { parseCredential($0) }) ?? (file.flatMap { parseCredential($0) })
+            let credential = location.read().flatMap { parseCredential($0.data) }
             let accountFile = custom?.appendingPathComponent(".claude.json") ?? home.appendingPathComponent(".claude.json")
             return (credential, try? Data(contentsOf: accountFile))
         }.value
-        guard let credential = loaded.0 else { return .unavailable(.notSignedIn) }
-        if let expiresAt = credential.expiresAt, expiresAt <= now { return .unavailable(.signInExpired) }
+        guard var credential = loaded.0 else { return .unavailable(.notSignedIn) }
+        // Claude Code renews its token only while it runs; renew an idle account's token here instead of reporting it signed out.
+        if let expiresAt = credential.expiresAt, expiresAt <= now.addingTimeInterval(ClaudeTokenRenewal.renewalMargin) {
+            let renewal = self.renewal
+            if let renewed = await renewal.renew(location, now: { now }).flatMap(parseCredential),
+               renewed.expiresAt.map({ $0 > now }) ?? true {
+                credential = renewed
+            } else if expiresAt <= now {
+                return .unavailable(.signInExpired)
+            }
+        }
         var request = URLRequest(url: usageURL, timeoutInterval: 10)
         request.setValue("Bearer \(credential.accessToken)", forHTTPHeaderField: "Authorization")
         request.setValue("oauth-2025-04-20", forHTTPHeaderField: "anthropic-beta")
@@ -164,19 +175,6 @@ struct ClaudeUsageClient: Sendable {
         guard !windows.isEmpty else { return .unavailable(.unexpectedResponse) }
         return .available(ClaudeSnapshot(account: parseAccount(loaded.1, plan: credential.plan), windows: windows, checkedAt: now))
     }
-}
-
-private func runCapturing(_ path: String, _ arguments: [String]) -> Data? {
-    let process = Process()
-    let output = Pipe()
-    process.executableURL = URL(fileURLWithPath: path)
-    process.arguments = arguments
-    process.standardOutput = output
-    process.standardError = FileHandle.nullDevice
-    guard (try? process.run()) != nil else { return nil }
-    let data = output.fileHandleForReading.readDataToEndOfFile()
-    process.waitUntilExit()
-    return process.terminationStatus == 0 ? data : nil
 }
 
 /// Persistent menu-bar preferences. Each AI has its own checkbox, so the menu

@@ -261,7 +261,8 @@ build/macos/Codex-Profiles-1.3.0-universal.dmg.sha256
 ```
 
 `make menu-app` builds just the app. `MENU_APP_BUILD_DIR` changes the output
-directory. Bundle versions are taken from the bundled CLI. The canonical
+directory. The app version comes from `macos/VERSION`, separate from the
+bundled CLI's version, so app updates ship without a CLI release. The canonical
 `make check` discovers the native and DMG tests automatically; native builds
 are skipped on hosts without macOS and Swift.
 
@@ -282,20 +283,24 @@ downloads the zip over https, checks its size and SHA-256 against
 doesn't match, and quits so a small script can swap the bundle (restoring the
 old one if the move fails) and reopen it. No credentials are sent.
 
-To publish an update, bump the version as usual, then run:
+To publish an update, double-click `build/release.command` in Finder, or run:
 
 ```sh
-make menu-update   # or scripts/macos/build-menu-update.sh --notes "What changed"
+build/release.command [patch|minor|major|<x.y.z>] [--notes "What changed"]
 ```
 
-It builds the app and writes `build/macos/update/AIProfile-<version>.zip` and
-`latest.json`. Or double-click `build/release.command` in Finder: it runs the
-same packaging with notes taken from the `macos/` commits since the last
-version tag, writes to `build/release/`, deletes the `build/macos/` working
-folder and opens `build/release/`. `build/build-app.command` only builds
-`build/macos/AI Profile.app` and shows it in Finder. These `*.command` files
-are the only committed files in `build/`. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
-folder of the public bucket, and purge the CDN cache for `latest.json`. Apps
+Like Termus's release command, it bumps `macos/VERSION` (patch by default),
+builds and packages `build/release/AIProfile-<version>.zip` and `latest.json`
+(notes default to the `macos/` commits since the previous `app-v*` tag),
+deletes the `build/macos/` working folder, commits
+`Release AI Profile <version>`, tags `app-v<version>` locally, asks before
+pushing, and opens `build/release/`. It refuses to run off `main` or with
+uncommitted app changes, and a failed build restores `macos/VERSION` without
+committing. `build/build-app.command` only builds `build/macos/AI Profile.app`
+and shows it in Finder; these `*.command` files are the only committed files in
+`build/`. `make menu-update` packages the current version without bumping.
+Upload the zip first, then `latest.json`, to the `AiProfile/release/` folder of
+the public bucket, and purge the CDN cache for `latest.json`. Apps
 only offer a version newer than their own. Development builds are ad-hoc
 signed, so after each update macOS may ask again for Terminal automation and
 Keychain access.

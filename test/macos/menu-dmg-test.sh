@@ -54,7 +54,8 @@ OUTPUT_DIR="$TMP_DIR/output with spaces"
 MENU_APP_BUILD_DIR="$OUTPUT_DIR" "$BUILD_SCRIPT"
 VERSION="$("$ROOT_DIR/bin/codex-profile" version)"
 VERSION="${VERSION#codex-profile }"
-DMG="$OUTPUT_DIR/Codex-Profiles-$VERSION-universal.dmg"
+APP_VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/macos/VERSION")"
+DMG="$OUTPUT_DIR/Codex-Profiles-$APP_VERSION-universal.dmg"
 [[ -s "$DMG" ]]
 (
   cd "$OUTPUT_DIR"
@@ -70,8 +71,8 @@ APP_DIR="$MOUNT_DIR/AI Profile.app"
 [[ "$(readlink "$MOUNT_DIR/Applications")" == /Applications ]]
 [[ -s "$MOUNT_DIR/License.txt" && -s "$MOUNT_DIR/Read Me.txt" ]]
 [[ "$("$APP_DIR/Contents/Resources/bin/codex-profile" version)" == "codex-profile $VERSION" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")" == "$VERSION" ]]
-[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist")" == "$VERSION" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$APP_DIR/Contents/Info.plist")" == "$APP_VERSION" ]]
+[[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP_DIR/Contents/Info.plist")" == "$APP_VERSION" ]]
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' "$APP_DIR/Contents/Info.plist")" == AppIcon ]]
 ARCHS="$(lipo -archs "$APP_DIR/Contents/MacOS/CodexProfilesMenu")"
 [[ " $ARCHS " == *' arm64 '* && " $ARCHS " == *' x86_64 '* ]]

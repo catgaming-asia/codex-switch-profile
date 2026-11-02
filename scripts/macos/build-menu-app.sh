@@ -24,7 +24,12 @@ install -d "$CONTENTS_DIR/MacOS" "$CONTENTS_DIR/Resources/bin"
 SOURCE_DIR="$TMP_DIR/Sources"
 ditto "$ROOT_DIR/macos/CodexProfilesMenu/Sources/CodexProfilesMenu" "$SOURCE_DIR"
 install -m 755 "$ROOT_DIR/bin/codex-profile" "$CONTENTS_DIR/Resources/bin/codex-profile"
-VERSION="$(sed -n 's/^VERSION="\([^"]*\)"$/\1/p' "$CONTENTS_DIR/Resources/bin/codex-profile")"
+# The app has its own version so app updates ship without a CLI release.
+VERSION="$(tr -d '[:space:]' < "$ROOT_DIR/macos/VERSION")"
+[[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+  printf 'Error: macos/VERSION must be x.y.z (found: %s).\n' "$VERSION" >&2
+  exit 1
+}
 install -m 644 "$ROOT_DIR/macos/CodexProfilesMenu/Info.plist" "$CONTENTS_DIR/Info.plist"
 
 for architecture in arm64 x86_64; do

@@ -103,7 +103,9 @@ Profile-to-path mapping: `default -> ~/.codex`; any other name `<x> -> ~/.codex-
 - Bump the version together in `bin/codex-profile`, `package.json`, both
   `package-lock.json` version fields, `docs/index.html`,
   `packaging/aur/PKGBUILD`, and `packaging/aur/.SRCINFO`. CI and the GEO test
-  enforce this synchronization.
+  enforce this synchronization. The menu app's own version is
+  `macos/VERSION`; `build/release.command` bumps it independently, and a CLI
+  version bump does not touch it.
 - Document user-facing changes under `## Unreleased` in `CHANGELOG.md`. Release
   preparation then promotes those entries into a dated `## <version> - <date>`
   section matching the newly tracked version, and the GEO test requires that

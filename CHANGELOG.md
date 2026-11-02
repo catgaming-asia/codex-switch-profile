@@ -9,6 +9,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Changed
 
+- The macOS menu app has its own version in `macos/VERSION`. `build/release.command` (or `make menu-release`) bumps it like Termus's release command, packages the update into `build/release/`, removes `build/macos/`, commits `Release AI Profile <version>`, tags `app-v<version>` locally and asks before pushing; a failed build commits nothing.
 - The macOS menu has a **Settings** gear at the top of the panel for app-wide options: Open at Login, Hide profile names, Low-quota alerts, About, Check for Updates and Quit. The Codex Profiles gear (now labelled Codex options) keeps New profile…, Sign in to Codex CLI and the workspace guard mode.
 - The macOS menu app's bundle identifier is now `asia.catgaming.aiprofile`. Settings saved under the old identifier are copied over on first launch; Open at Login and notification permission must be allowed again.
 - The CI workflow no longer runs automatically on pushes or pull requests; run it manually from the Actions tab (`workflow_dispatch`).

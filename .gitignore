@@ -32,7 +32,9 @@ node_modules/
 
 # Build, test, and render outputs
 dist/
-build/
+# Root build/ holds outputs; its *.command release helpers are committed.
+/build/*
+!/build/*.command
 coverage/
 out/
 .remotion/

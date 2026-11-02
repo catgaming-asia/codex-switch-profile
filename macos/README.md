@@ -287,7 +287,10 @@ make menu-update   # or scripts/macos/build-menu-update.sh --notes "What changed
 ```
 
 It builds the app and writes `build/macos/update/AIProfile-<version>.zip` and
-`latest.json`. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
+`latest.json`. Or double-click `build/release.command` in Finder (the one
+committed file in `build/`): it runs the same packaging with notes taken from
+the `macos/` commits since the last version tag, writes to `build/release/`
+and opens that folder. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
 folder of the public bucket, and purge the CDN cache for `latest.json`. Apps
 only offer a version newer than their own. Development builds are ad-hoc
 signed, so after each update macOS may ask again for Terminal automation and

@@ -2,8 +2,8 @@
 # Packages an AI Profile update for https://data.catgaming.asia/AiProfile/release/.
 #   build/release.command [--notes "<text>"]
 # Double-click in Finder or run from Terminal. Builds the app, writes
-# AIProfile-<version>.zip and latest.json into build/release/, then opens that
-# folder. Nothing is uploaded or committed: upload the zip, then latest.json,
+# AIProfile-<version>.zip and latest.json into build/release/, deletes the
+# build/macos/ working folder, then opens build/release/. Nothing is uploaded or committed: upload the zip, then latest.json,
 # and purge the CDN cache for latest.json. The work is done by
 # scripts/macos/build-menu-update.sh, which the test suite covers.
 set -euo pipefail
@@ -34,7 +34,10 @@ if (( ! HAVE_NOTES )); then
 fi
 
 OUT="$ROOT/build/release"
-MENU_UPDATE_OUTPUT_DIR="$OUT" "$ROOT/scripts/macos/build-menu-update.sh" --notes "$NOTES"
+WORK="$ROOT/build/macos"
+MENU_UPDATE_OUTPUT_DIR="$OUT" MENU_APP_BUILD_DIR="$WORK" "$ROOT/scripts/macos/build-menu-update.sh" --notes "$NOTES"
+# Only the release is kept; build/build-app.command recreates build/macos/ when needed.
+rm -rf -- "$WORK"
 echo
 echo "Notes:"
 print -r -- "$NOTES" | sed 's/^/  /'

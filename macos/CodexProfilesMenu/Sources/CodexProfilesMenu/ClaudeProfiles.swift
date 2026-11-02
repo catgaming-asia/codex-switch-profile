@@ -11,13 +11,16 @@ enum ClaudeProfileKind: String, Codable, Equatable, Sendable {
 
 /// A named way of running Claude Code. Account profiles own a private
 /// `CLAUDE_CONFIG_DIR` (the built-in default profile uses `~/.claude`); API
-/// profiles hold an endpoint and model here and the API key only in Keychain.
+/// profiles hold an endpoint, model and optional monthly limit here and the
+/// API key (and an optional Admin API key for spend) only in Keychain.
 struct ClaudeProfile: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var kind: ClaudeProfileKind
     var baseURL: String?
     var model: String?
+    /// The organization's monthly spend limit in US dollars, as set in the Console; the Admin API doesn't report it.
+    var monthlyLimit: Double? = nil
 
     var isDefaultAccount: Bool { id == defaultClaudeProfileID }
 
@@ -30,7 +33,15 @@ protocol ClaudeSecretStore: Sendable {
     func save(_ secret: String, id: String) -> Bool
     func exists(id: String) -> Bool
     func delete(id: String)
+    func read(id: String) -> String?
 }
+
+extension ClaudeSecretStore {
+    func read(id: String) -> String? { nil }
+}
+
+/// The Keychain account of an API profile's Admin API key, beside its API key.
+func claudeAdminKeyID(_ profileID: String) -> String { profileID + ".admin" }
 
 /// Keychain-backed API keys. The item trusts this app and `/usr/bin/security`,
 /// so the `apiKeyHelper` command Claude Code runs can read it without a prompt.
@@ -61,6 +72,14 @@ struct KeychainClaudeSecrets: ClaudeSecretStore {
 
     func delete(id: String) {
         SecItemDelete(query(id) as CFDictionary)
+    }
+
+    func read(id: String) -> String? {
+        var item = query(id)
+        item[kSecReturnData] = true
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(item as CFDictionary, &result) == errSecSuccess, let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
     }
 }
 
@@ -253,6 +272,15 @@ final class ClaudeProfileStore: ObservableObject {
         profile.kind == .api && !(profile.baseURL ?? "").isEmpty && secrets.exists(id: profile.id)
     }
 
+    func hasAdminKey(_ profile: ClaudeProfile) -> Bool {
+        profile.kind == .api && secrets.exists(id: claudeAdminKeyID(profile.id))
+    }
+
+    /// Read only to request the organization's spend; never displayed.
+    func adminKey(for profile: ClaudeProfile) -> String? {
+        profile.kind == .api ? secrets.read(id: claudeAdminKeyID(profile.id))?.nilIfEmpty : nil
+    }
+
     private var file: URL { directory.appendingPathComponent("claude-profiles.json") }
 
     private func load() {
@@ -289,14 +317,40 @@ final class ClaudeProfileStore: ObservableObject {
         return nil
     }
 
-    /// Adds or updates a profile. A non-empty `apiKey` replaces the saved key.
-    func upsert(_ profile: ClaudeProfile, apiKey: String) -> String? {
+    /// Checks the optional spend fields of an API profile.
+    func validateSpend(adminKey: String, monthlyLimit: String, kind: ClaudeProfileKind) -> String? {
+        guard kind == .api else { return nil }
+        let key = adminKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !key.isEmpty && !key.hasPrefix("sk-ant-admin") {
+            return "That isn’t an Admin API key. Spend needs a key starting with sk-ant-admin, created by an organization admin in the Console."
+        }
+        let limit = monthlyLimit.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !limit.isEmpty && Self.parseLimit(limit) == nil { return "Enter the monthly limit as a number of US dollars, such as 1000." }
+        return nil
+    }
+
+    /// "1,000", "$1000" and "1000.50" all read as dollars; empty or zero means no limit.
+    static func parseLimit(_ text: String) -> Double? {
+        let cleaned = text.replacingOccurrences(of: ",", with: "").replacingOccurrences(of: "$", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let value = Double(cleaned), value > 0, value.isFinite else { return nil }
+        return value
+    }
+
+    /// Adds or updates a profile. A non-empty `apiKey` or `adminKey` replaces
+    /// the saved one; `removeAdminKey` deletes the saved Admin API key.
+    func upsert(_ profile: ClaudeProfile, apiKey: String, adminKey: String = "", removeAdminKey: Bool = false) -> String? {
         var stored = profile
         stored.name = profile.name.trimmingCharacters(in: .whitespacesAndNewlines)
         stored.baseURL = profile.kind == .api ? profile.baseURL?.trimmingCharacters(in: .whitespacesAndNewlines) : nil
         stored.model = profile.kind == .api ? profile.model?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty : nil
+        stored.monthlyLimit = profile.kind == .api ? profile.monthlyLimit.flatMap { $0 > 0 ? $0 : nil } : nil
         if stored.kind == .api, !apiKey.isEmpty, !secrets.save(apiKey, id: stored.id) {
             return "Couldn’t save the API key to Keychain. Unlock your login keychain, then try again."
+        }
+        if stored.kind == .api, removeAdminKey { secrets.delete(id: claudeAdminKeyID(stored.id)) }
+        if stored.kind == .api, !adminKey.isEmpty, !secrets.save(adminKey, id: claudeAdminKeyID(stored.id)) {
+            return "Couldn’t save the Admin API key to Keychain. Unlock your login keychain, then try again."
         }
         if let index = profiles.firstIndex(where: { $0.id == stored.id }) { profiles[index] = stored } else { profiles.append(stored) }
         guard save() else { return notice }
@@ -310,6 +364,7 @@ final class ClaudeProfileStore: ObservableObject {
         guard let profile = profiles.first(where: { $0.id == id }), !profile.isDefaultAccount else { return nil }
         if id == currentID, let error = switchTo(defaultClaudeProfileID) { return error }
         secrets.delete(id: id)
+        secrets.delete(id: claudeAdminKeyID(id))
         if let directory = accountDirectory(for: profile) { try? FileManager.default.removeItem(at: directory) }
         profiles.removeAll { $0.id == id }
         return save() ? nil : notice

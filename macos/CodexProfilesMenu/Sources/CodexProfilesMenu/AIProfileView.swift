@@ -181,6 +181,7 @@ private struct ClaudeProfileInfo: View {
     let profile: ClaudeProfile
     let account: ClaudeAccount?
     let isConfigured: Bool
+    let hasAdminKey: Bool
     let isCurrent: Bool
     let back: () -> Void
 
@@ -196,6 +197,8 @@ private struct ClaudeProfileInfo: View {
                 ClaudeProfileInfoRow(title: "Endpoint", value: profile.baseURL?.nilIfEmpty)
                 ClaudeProfileInfoRow(title: "Model", value: profile.model?.nilIfEmpty ?? "Claude Code default")
                 ClaudeProfileInfoRow(title: "API key", value: isConfigured ? "Configured" : "Needs setup")
+                ClaudeProfileInfoRow(title: "Admin key", value: hasAdminKey ? "Configured" : "Not set")
+                ClaudeProfileInfoRow(title: "Monthly limit", value: profile.monthlyLimit.map(ClaudeMoney.format) ?? "Not set")
             } else {
                 ClaudeProfileInfoRow(title: "Email", value: account?.email)
                 ClaudeProfileInfoRow(title: "Plan", value: account?.plan.map { "Claude \($0.capitalized)" })
@@ -205,9 +208,96 @@ private struct ClaudeProfileInfo: View {
     }
 }
 
+enum ClaudeMoney {
+    static func format(_ dollars: Double) -> String {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencyCode = "USD"
+        formatter.locale = Locale(identifier: "en_US")
+        // Whole dollars from $100 keep "$812 of $1,000" inside the row.
+        formatter.maximumFractionDigits = dollars >= 100 || dollars.rounded() == dollars ? 0 : 2
+        return formatter.string(from: NSNumber(value: dollars)) ?? "$\(dollars)"
+    }
+}
+
+private func quotaTint(_ level: QuotaLevel) -> Color {
+    switch level {
+    case .normal: return .green
+    case .low: return .orange
+    case .critical: return .red
+    }
+}
+
+/// One compact "5h ▬ 76%" line, the Claude counterpart of a Codex row's usage column.
+private struct ClaudeRowMeter: View {
+    let label: String
+    let fraction: Double
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Text(label).font(.system(size: 10)).foregroundStyle(.secondary).frame(width: 20, alignment: .trailing)
+            ProgressView(value: min(max(fraction, 0), 1)).tint(tint).frame(width: 52)
+            Text(text).font(.system(size: 11, weight: .semibold).monospacedDigit()).foregroundStyle(tint == .red ? .red : .primary)
+                .frame(width: 34, alignment: .trailing)
+        }
+    }
+}
+
+/// Subscription quota for an account row, or this month's organization spend for an API row.
+private struct ClaudeRowUsage: View {
+    let quota: ClaudeUsageState?
+    let spend: ClaudeSpendState?
+    let limit: Double?
+
+    var body: some View {
+        let now = Date()
+        Group {
+            if let quota {
+                switch quota {
+                case .loading: ProgressView().controlSize(.mini)
+                case let .unavailable(reason):
+                    Text(reason == .notSignedIn ? "" : "No quota").font(.system(size: 10)).foregroundStyle(.secondary)
+                        .help(reason.title)
+                case let .available(snapshot):
+                    VStack(alignment: .trailing, spacing: 3) {
+                        ForEach(snapshot.windows.filter { ["five_hour", "seven_day"].contains($0.id) }, id: \.id) { window in
+                            let reset = window.hasReset(at: now)
+                            ClaudeRowMeter(label: window.id == "five_hour" ? "5h" : "7d", fraction: reset ? 1 : Double(window.remainingPercent) / 100,
+                                           text: reset ? "–" : "\(window.remainingPercent)%", tint: reset ? .secondary : quotaTint(window.level))
+                        }
+                    }
+                    .help("Claude subscription quota left. Checked \(UsageFormat.clock(snapshot.checkedAt, relativeTo: now)).")
+                }
+            } else if let spend {
+                switch spend {
+                case .loading: ProgressView().controlSize(.mini)
+                case let .unavailable(message):
+                    Text("No spend").font(.system(size: 10)).foregroundStyle(.secondary).help(message)
+                case let .available(dollars, checkedAt):
+                    VStack(alignment: .trailing, spacing: 3) {
+                        if let limit {
+                            let used = dollars / limit
+                            ClaudeRowMeter(label: "Mo", fraction: used, text: "\(Int((used * 100).rounded()))%",
+                                           tint: used >= 0.9 ? .red : used >= 0.75 ? .orange : .green)
+                        }
+                        Text(limit.map { "\(ClaudeMoney.format(dollars)) of \(ClaudeMoney.format($0))" } ?? "\(ClaudeMoney.format(dollars)) this month")
+                            .font(.system(size: 10).monospacedDigit()).foregroundStyle(.secondary).fixedSize()
+                    }
+                    .help("Organization spend this month (UTC), from the Admin API. Checked \(UsageFormat.clock(checkedAt, relativeTo: now)).")
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
 private struct ClaudeProfileRow: View {
     let profile: ClaudeProfile
     @ObservedObject var store: ClaudeProfileStore
+    let quota: ClaudeUsageState?
+    let spend: ClaudeSpendState?
     let accountEmail: String?
     let showInfo: () -> Void
     let edit: () -> Void
@@ -235,6 +325,7 @@ private struct ClaudeProfileRow: View {
                         .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
                 Spacer()
+                ClaudeRowUsage(quota: quota, spend: spend, limit: profile.monthlyLimit)
                 if isCurrent {
                     Text("Current").font(.system(size: 11, weight: .semibold)).foregroundStyle(.green)
                 } else {
@@ -275,6 +366,9 @@ private struct ClaudeProfileForm: View {
     @State private var baseURL = "https://api.anthropic.com"
     @State private var model = ""
     @State private var apiKey = ""
+    @State private var adminKey = ""
+    @State private var removeAdminKey = false
+    @State private var monthlyLimit = ""
     @State private var error: String?
 
     var body: some View {
@@ -293,6 +387,13 @@ private struct ClaudeProfileForm: View {
                 TextField("Model (optional)", text: $model)
                 SecureField(editing == nil ? "API key" : "API key (leave empty to keep the saved key)", text: $apiKey)
                 Text("The key is stored in Keychain only.").font(.system(size: 11)).foregroundStyle(.secondary)
+                let savedAdmin = editing.map(store.hasAdminKey) ?? false
+                SecureField(savedAdmin ? "Admin API key (leave empty to keep the saved key)" : "Admin API key (optional, for monthly spend)", text: $adminKey)
+                    .disabled(removeAdminKey)
+                if savedAdmin { Toggle("Remove the saved Admin API key", isOn: $removeAdminKey).toggleStyle(.checkbox) }
+                TextField("Monthly spend limit in USD (optional)", text: $monthlyLimit)
+                Text("An Admin API key (sk-ant-admin…) lets the row show your organization’s spend this month. Only organization admins can create one in the Console. Enter the limit shown under Spend limits; the API doesn’t report it.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
             } else {
                 Text("Save, then choose Sign in… to log in to this account in its own Claude Code folder.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
@@ -312,16 +413,19 @@ private struct ClaudeProfileForm: View {
             kind = editing.kind
             baseURL = editing.baseURL ?? ""
             model = editing.model ?? ""
+            monthlyLimit = editing.monthlyLimit.map { String(format: $0.rounded() == $0 ? "%.0f" : "%.2f", $0) } ?? ""
         }
     }
 
     private func save() {
         error = store.validate(name: name, kind: kind, baseURL: baseURL, apiKey: apiKey, editing: editing)
+            ?? store.validateSpend(adminKey: adminKey, monthlyLimit: monthlyLimit, kind: kind)
         guard error == nil else { return }
-        let profile = ClaudeProfile(id: editing?.id ?? store.newProfileID(), name: name, kind: kind,
+        var profile = ClaudeProfile(id: editing?.id ?? store.newProfileID(), name: name, kind: kind,
                                     baseURL: kind == .api ? baseURL : nil, model: kind == .api ? model : nil)
-        error = store.upsert(profile, apiKey: apiKey)
-        if error == nil { apiKey = ""; done() }
+        profile.monthlyLimit = ClaudeProfileStore.parseLimit(monthlyLimit)
+        error = store.upsert(profile, apiKey: apiKey, adminKey: removeAdminKey ? "" : adminKey, removeAdminKey: removeAdminKey)
+        if error == nil { apiKey = ""; adminKey = ""; done() }
     }
 }
 
@@ -329,6 +433,7 @@ private struct ClaudeProfilesSection: View {
     @ObservedObject var store: ClaudeProfileStore
     @ObservedObject var settings: AIProfileSettings
     @ObservedObject var usage: ClaudeUsageStore
+    @ObservedObject var rowUsage: ClaudeProfileUsageStore
     let accounts: (ClaudeProfile) -> ClaudeAccount?
     @State private var infoID: String?
     @State private var editorOpen = false
@@ -340,6 +445,12 @@ private struct ClaudeProfilesSection: View {
         guard profile.kind == .account, let account = accounts(profile) else { return nil }
         guard profile.id == store.currentID, store.current.kind == .account, case let .available(snapshot) = usage.state else { return account }
         return ClaudeAccount(email: account.email, organization: account.organization, plan: snapshot.account.plan)
+    }
+
+    /// The current account shows the In use reading; other accounts their own.
+    private func quota(for profile: ClaudeProfile) -> ClaudeUsageState? {
+        guard profile.kind == .account else { return nil }
+        return profile.id == store.currentID ? usage.state : rowUsage.quota[profile.id]
     }
 
     var body: some View {
@@ -373,14 +484,18 @@ private struct ClaudeProfilesSection: View {
             // Collapsed content stays in the hierarchy at zero height so an open form keeps its fields.
             VStack(alignment: .leading, spacing: 8) {
                 if editorOpen {
-                    ClaudeProfileForm(store: store, editing: editing) { editorOpen = false }
+                    ClaudeProfileForm(store: store, editing: editing) {
+                        editorOpen = false
+                        Task { await rowUsage.refresh(store, force: true) }
+                    }
                         .id(editing?.id ?? "new")
                 } else if let profile = store.profiles.first(where: { $0.id == infoID }) {
                     ClaudeProfileInfo(profile: profile, account: info(for: profile), isConfigured: store.isConfigured(profile),
-                                      isCurrent: store.currentID == profile.id) { infoID = nil }
+                                      hasAdminKey: store.hasAdminKey(profile), isCurrent: store.currentID == profile.id) { infoID = nil }
                 } else {
                     ForEach(store.profiles) { profile in
-                        ClaudeProfileRow(profile: profile, store: store, accountEmail: accounts(profile)?.email,
+                        ClaudeProfileRow(profile: profile, store: store, quota: quota(for: profile), spend: rowUsage.spend[profile.id],
+                                         accountEmail: accounts(profile)?.email,
                                          showInfo: { infoID = profile.id },
                                          edit: { editing = profile; editorOpen = true }) { error = $0 }
                     }
@@ -417,6 +532,7 @@ final class AIProfileViewController: NSViewController {
     private let settings: AIProfileSettings
     private let claude: ClaudeUsageStore
     private let profiles: ClaudeProfileStore
+    private let rowUsage: ClaudeProfileUsageStore
     private var subscriptions: Set<AnyCancellable> = []
     private let current = CodexCurrentModel()
     private let maxHeight: CGFloat = 560
@@ -427,8 +543,9 @@ final class AIProfileViewController: NSViewController {
     var onPreferredContentSizeChange: ((NSSize) -> Void)?
 
     init(codex: WorkspaceMenuViewController, store: WorkspaceStore, settings: AIProfileSettings, claude: ClaudeUsageStore,
-         profiles: ClaudeProfileStore) {
+         profiles: ClaudeProfileStore, rowUsage: ClaudeProfileUsageStore? = nil) {
         self.profiles = profiles
+        self.rowUsage = rowUsage ?? ClaudeProfileUsageStore()
         self.codex = codex
         codexStore = store
         self.settings = settings
@@ -452,8 +569,9 @@ final class AIProfileViewController: NSViewController {
         let section = NSHostingView(rootView: CurrentSection(codex: current, claude: claude, settings: settings, profiles: profiles) { [weak self] in
             guard let self else { return }
             Task { await self.claude.refresh(force: true) }
+            Task { await self.rowUsage.refresh(self.profiles, force: true) }
         })
-        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles, settings: settings, usage: claude) { [weak self] profile in
+        let claudeSection = NSHostingView(rootView: ClaudeProfilesSection(store: profiles, settings: settings, usage: claude, rowUsage: rowUsage) { [weak self] profile in
             guard let self, profile.kind == .account else { return nil }
             return self.claudeAccount(in: self.profiles.accountDirectory(for: profile))
         })
@@ -553,6 +671,11 @@ final class AIProfileViewController: NSViewController {
     }
 
     func focusMenu() { codex.focusMenu() }
+
+    /// Reads quota and spend for the Claude profile rows; throttled unless forced.
+    func refreshClaudeRows(force: Bool = false) {
+        Task { await rowUsage.refresh(profiles, force: force) }
+    }
 
     func handleShortcut(_ event: NSEvent) -> Bool { codex.handleShortcut(event) }
 }

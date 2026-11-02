@@ -6,6 +6,7 @@ final class MemorySecrets: ClaudeSecretStore, @unchecked Sendable {
     func save(_ secret: String, id: String) -> Bool { lock.lock(); defer { lock.unlock() }; values[id] = secret; return true }
     func exists(id: String) -> Bool { lock.lock(); defer { lock.unlock() }; return values[id] != nil }
     func delete(id: String) { lock.lock(); defer { lock.unlock() }; values[id] = nil }
+    func read(id: String) -> String? { lock.lock(); defer { lock.unlock() }; return values[id] }
 }
 
 /// Isolated smoke checks: a temp directory stands in for the home folder and

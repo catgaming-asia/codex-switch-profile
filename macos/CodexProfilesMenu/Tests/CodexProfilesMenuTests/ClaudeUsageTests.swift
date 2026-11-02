@@ -58,7 +58,55 @@ struct ClaudeUsageTests {
         await stale.value
         expect(racing.state == .unavailable(.rateLimited) && !racing.isRefreshing, "stale reading is dropped")
         await renewalSmoke(usage: usage)
+        await spendSmoke()
         print("Claude usage smoke tests passed.")
+    }
+
+    /// Organization spend comes from the Admin API in cents; rows read quota for
+    /// non-current accounts and spend only for API profiles with an admin key.
+    private static func spendSmoke() async {
+        let spendClient = ClaudeSpendClient()
+        expect(spendClient.parseDollars(Data(#"{"data":[{"cost":{"currency":"USD","amount":"41280.000000","list_amount":"1"}},{"cost":{"currency":"USD","amount":"20.5"}}]}"#.utf8)) == 413.005,
+               "amounts are summed cents")
+        expect(spendClient.parseDollars(Data(#"{"data":[]}"#.utf8)) == 0 && spendClient.parseDollars(Data("{}".utf8)) == nil, "empty month is zero, junk is unknown")
+        let october = ISO8601DateFormatter().date(from: "2026-10-31T23:59:00Z")!
+        expect(ClaudeSpendClient.monthStart(october) == ISO8601DateFormatter().date(from: "2026-10-01T00:00:00Z"), "month starts in UTC")
+
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [StubProtocol.self]
+        let client = ClaudeSpendClient(session: URLSession(configuration: configuration))
+        StubProtocol.reset(tokenStatus: 200, tokenBody: "{}", usage: Data(#"{"data":[{"cost":{"currency":"USD","amount":"1234.000000"}}],"has_more":false}"#.utf8))
+        expect(await client.fetch(adminKey: "sk-ant-admin-test", now: october) == .available(dollars: 12.34, checkedAt: october), "spend in dollars")
+        let sent = StubProtocol.lastRequest!
+        expect(sent.value(forHTTPHeaderField: "x-api-key") == "sk-ant-admin-test" && sent.value(forHTTPHeaderField: "anthropic-beta") == ClaudeSpendClient.beta
+            && sent.value(forHTTPHeaderField: "anthropic-version") == "2023-06-01"
+            && sent.url?.absoluteString == "https://api.anthropic.com/v1/organizations/analytics/cost?starting_at=2026-10-01T00:00:00Z",
+            "the cost request totals the month with the admin key: \(sent.url?.absoluteString ?? "")")
+
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("claude-spend-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let secrets = MemorySecrets()
+        let store = ClaudeProfileStore(directory: root, claudeDirectory: root.appendingPathComponent(".claude"), secrets: secrets, openTerminal: { _ in nil })
+        expect(store.validateSpend(adminKey: "sk-ant-api03-x", monthlyLimit: "", kind: .api) != nil, "a regular key is refused as an admin key")
+        expect(store.validateSpend(adminKey: "sk-ant-admin01-x", monthlyLimit: "$1,000", kind: .api) == nil
+            && ClaudeProfileStore.parseLimit("$1,000") == 1000 && store.validateSpend(adminKey: "", monthlyLimit: "lots", kind: .api) != nil, "limit parsing")
+        var api = ClaudeProfile(id: "api-1", name: "Work API", kind: .api, baseURL: "https://api.anthropic.com", model: nil)
+        api.monthlyLimit = 1000
+        expect(store.upsert(api, apiKey: "sk-ant-api03-k", adminKey: "sk-ant-admin01-a") == nil, "saving the admin key")
+        expect(store.hasAdminKey(api) && store.adminKey(for: api) == "sk-ant-admin01-a" && store.profiles.last?.monthlyLimit == 1000, "admin key and limit stored")
+        _ = store.upsert(ClaudeProfile(id: "acct-1", name: "Second", kind: .account, baseURL: nil, model: nil), apiKey: "")
+        let seen = SeenRequests()
+        let rows = ClaudeProfileUsageStore(fetchQuota: { directory in seen.add("quota:\(directory?.lastPathComponent ?? "default")"); return .unavailable(.network) },
+                                           fetchSpend: { key in seen.add("spend:\(key)"); return .available(dollars: 5, checkedAt: october) })
+        await rows.refresh(store)
+        expect(seen.values.sorted() == ["quota:acct-1", "spend:sk-ant-admin01-a"], "only the other account and the keyed API profile are read: \(seen.values)")
+        expect(rows.quota["acct-1"] == .unavailable(.network) && rows.spend["api-1"] == .available(dollars: 5, checkedAt: october), "row readings")
+        await rows.refresh(store)
+        expect(seen.values.count == 2, "row readings are throttled")
+        expect(store.upsert(api, apiKey: "", removeAdminKey: true) == nil && !store.hasAdminKey(api), "removing the admin key")
+        await rows.refresh(store, force: true)
+        expect(rows.spend.isEmpty && seen.values.count == 3, "a profile without an admin key has no spend")
+        expect(store.remove("api-1") == nil && !secrets.exists(id: claudeAdminKeyID("api-1")), "deleting a profile deletes its admin key")
     }
 
     /// An idle account's expired token is renewed and stored back, keeping the
@@ -136,6 +184,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
     nonisolated(unsafe) static var usage = Data()
     nonisolated(unsafe) static var tokenRequests: [Data] = []
     nonisolated(unsafe) static var usageTokens: [String] = []
+    nonisolated(unsafe) static var lastRequest: URLRequest?
 
     static func reset(tokenStatus: Int, tokenBody: String, usage: Data) {
         self.tokenStatus = tokenStatus
@@ -150,6 +199,7 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
     override func stopLoading() {}
 
     override func startLoading() {
+        Self.lastRequest = request
         let isToken = request.url?.path == "/v1/oauth/token"
         if isToken {
             var body = request.httpBody ?? Data()
@@ -172,4 +222,11 @@ final class StubProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocol(self, didLoad: isToken ? Self.tokenBody : Self.usage)
         client?.urlProtocolDidFinishLoading(self)
     }
+}
+
+final class SeenRequests: @unchecked Sendable {
+    private let lock = NSLock()
+    private var list: [String] = []
+    var values: [String] { lock.lock(); defer { lock.unlock() }; return list }
+    func add(_ value: String) { lock.lock(); list.append(value); lock.unlock() }
 }

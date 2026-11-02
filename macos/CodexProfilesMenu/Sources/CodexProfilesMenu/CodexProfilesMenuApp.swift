@@ -63,6 +63,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.claudeStore.select(configDirectory: self.claudeProfiles.accountDirectory(for: self.claudeProfiles.current))
             self.updateStatusItem(self.alerts.indicator)
             Task { await self.claudeStore.refresh() }
+            // The previous current account now needs its own row reading.
+            self.menuController?.refreshClaudeRows(force: true)
         }
         menuController = controller
         NSApp.mainMenu = EditMenu().makeMainMenu()
@@ -239,6 +241,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 await store.autoSwitchIfNeeded()
             }
             Task { await claudeStore.refresh() }
+            menuController?.refreshClaudeRows()
             Task { await alerts.refreshPermission() }
         }
     }

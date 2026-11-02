@@ -20,7 +20,7 @@ It is community-maintained and is **not** an official OpenAI project.
 
 - `bin/codex-profile` — the entire CLI (Bash). Edit this for behavior changes.
 - `macos/` — optional native menu-bar companion; delegates profile operations
-  to the bundled CLI. Build and DMG programs live in `scripts/macos/`.
+  to the bundled CLI. Build, DMG and update-packaging programs live in `scripts/macos/`.
 - `raycast/` — optional Raycast extension (TypeScript, its own npm
   dependencies); delegates every profile operation to the `codex-profile` CLI
   (a standalone install or the menu-bar app's bundled copy) and never reads

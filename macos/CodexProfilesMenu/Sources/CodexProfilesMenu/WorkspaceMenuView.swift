@@ -69,6 +69,11 @@ final class WorkspaceMenuViewController: NSViewController {
     var onRequestClose: (() -> Void)?
     /// Reopens the menu after a dialog that had to close it, so the result is visible.
     var onRequestShow: (() -> Void)?
+    /// Checks and installs app updates from the release folder; nil hides the menu items.
+    var updater: AppUpdater? {
+        didSet { updater?.onChange = { [weak self] phase in self?.updateDidChange(phase) } }
+    }
+    private var lastUpdatePhase = AppUpdatePhase.idle
     /// The Codex profiles section folds to its header; the vertical panel persists the choice.
     var isCollapsed = false {
         didSet {
@@ -758,6 +763,20 @@ final class WorkspaceMenuViewController: NSViewController {
         }
         menu.addItem(.separator())
         menu.addItem(menuItem("About AI Profile", #selector(showAbout), symbol: nil, nil))
+        if let updater {
+            switch updater.phase {
+            case let .available(manifest):
+                menu.addItem(menuItem("Install AI Profile \(manifest.version)…", #selector(installUpdate), symbol: "arrow.down.circle", nil))
+            case let .downloading(manifest, _), let .installing(manifest):
+                let busy = NSMenuItem(title: "Updating to AI Profile \(manifest.version)…", action: nil, keyEquivalent: "")
+                busy.isEnabled = false
+                menu.addItem(busy)
+            default:
+                let check = menuItem("Check for Updates…", #selector(checkForUpdates), symbol: nil, nil)
+                check.isEnabled = !updater.isBusy
+                menu.addItem(check)
+            }
+        }
         let guardItem = NSMenuItem(title: "Workspace guard: \(store.guardMode)", action: nil, keyEquivalent: "")
         guardItem.isEnabled = false
         menu.addItem(guardItem)
@@ -905,6 +924,66 @@ final class WorkspaceMenuViewController: NSViewController {
         settingsMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
     }
     @objc private func showAbout() { onRequestClose?(); NSApp.orderFrontStandardAboutPanel(nil) }
+
+    @objc private func checkForUpdates() {
+        guard let updater else { return }
+        onRequestClose?()
+        Task {
+            switch await updater.check() {
+            case let .available(manifest): confirmUpdate(manifest)
+            case .upToDate: presentNotice("AI Profile is up to date", "You have the latest version, \(AppUpdate.currentVersion).")
+            case let .failed(message): presentError(message)
+            default: break
+            }
+        }
+    }
+
+    @objc private func installUpdate() {
+        guard let manifest = updater?.availableUpdate else { return }
+        onRequestClose?()
+        confirmUpdate(manifest)
+    }
+
+    private func confirmUpdate(_ manifest: UpdateManifest) {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let updater = self.updater else { return }
+            let alert = NSAlert()
+            alert.messageText = "AI Profile \(manifest.version) is available"
+            let notes = manifest.notes.isEmpty ? "" : "\n\n" + manifest.notes
+            alert.informativeText = "You have \(AppUpdate.currentVersion). Installing downloads the update, checks it, then quits and reopens AI Profile.\(notes)"
+            alert.addButton(withTitle: "Install and Relaunch")
+            alert.addButton(withTitle: "Later")
+            NSApp.activate(ignoringOtherApps: true)
+            guard alert.runModal() == .alertFirstButtonReturn else { return }
+            updater.install(manifest)
+        }
+    }
+
+    /// The footer follows an install; a failed install says why. Background checks only announce a new version.
+    private func updateDidChange(_ phase: AppUpdatePhase) {
+        let previous = lastUpdatePhase
+        lastUpdatePhase = phase
+        switch phase {
+        case let .available(manifest) where previous != phase:
+            store.showMessage("AI Profile \(manifest.version) is available. Choose Options › Install.")
+        case let .downloading(manifest, _): store.showMessage("Downloading AI Profile \(manifest.version)…")
+        case let .installing(manifest): store.showMessage("Installing AI Profile \(manifest.version)…")
+        case let .failed(message):
+            if case .downloading = previous { store.showMessage(message); presentError(message) }
+        default: break
+        }
+    }
+
+    private func presentNotice(_ title: String, _ message: String) {
+        DispatchQueue.main.async {
+            let alert = NSAlert()
+            alert.messageText = title
+            alert.informativeText = message
+            alert.addButton(withTitle: "OK")
+            NSApp.activate(ignoringOtherApps: true)
+            alert.runModal()
+        }
+    }
     @objc private func quit() { NSApp.terminate(nil) }
 
     @objc private func toggleOpenAtLogin() {

@@ -89,7 +89,7 @@ hdiutil create -quiet -volname 'AI Profile' -srcfolder "$STAGING_DIR" \
 
 if [[ -n "$SIGNING_IDENTITY" ]]; then
   codesign --sign "$SIGNING_IDENTITY" --timestamp \
-    --identifier dev.ducksss.codex-profiles.menu.dmg "$TMP_DIR/$DMG_NAME"
+    --identifier asia.catgaming.aiprofile.dmg "$TMP_DIR/$DMG_NAME"
   codesign --verify --strict "$TMP_DIR/$DMG_NAME"
 fi
 

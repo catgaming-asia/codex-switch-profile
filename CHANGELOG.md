@@ -9,6 +9,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Changed
 
+- The macOS menu app's bundle identifier is now `asia.catgaming.aiprofile`. Settings saved under the old identifier are copied over on first launch; Open at Login and notification permission must be allowed again.
 - The CI workflow no longer runs automatically on pushes or pull requests; run it manually from the Actions tab (`workflow_dispatch`).
 - The macOS menu app's Codex Profiles and Claude Profiles headers now share one style (44-point row, 13-point semibold Title Case, 16-point icon, one thin separator), and clicking anywhere on a header's title row, including the empty space, folds or unfolds that section. Options and Add stay separate buttons.
 - The macOS menu app now marks Codex with a monochrome terminal symbol and Claude with a sun symbol, the same SF Symbols in the menu bar, In use and the Codex and Claude profile headers (Claude profiles had none). Profile avatar and key icons are unchanged, as is the app icon.
@@ -28,6 +29,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Added
 
+- The macOS menu app updates itself from `https://data.catgaming.asia/AiProfile/release/`: it checks `latest.json` after launch and twice a day, offers **Install AI Profile x.y.z…** in the gear menu (or **Check for Updates…**), verifies the download's size, SHA-256, bundle identifier and version, and swaps and reopens the app. `make menu-update` packages the zip and `latest.json` for upload.
 - Each Claude account profile in the macOS menu now shows its own 5-hour and weekly quota left on its row, like Codex profiles; the current account reuses the In use reading.
 - A Claude API profile can hold an optional Admin API key (Keychain only) and the monthly spend limit from the Console. Its row then shows the organization's spend this month (UTC) from the Admin API's Usage and Cost Analytics endpoint, and the share of the limit used. A regular API key can't read spend, and the API doesn't report the limit, so you enter it.
 - The macOS menu is now one vertical scrolling panel: **In use** (Codex and Claude with their usage, each with its own menu bar checkbox, so the menu bar can show Codex, Claude, both or neither), **Codex profiles** (unchanged list, Switch, Auto and workspaces) and **Claude profiles**. Claude usage is the real 5-hour and weekly subscription quota or a clear unavailable state; it never shows token cost as quota, and API profiles show endpoint and model instead of a quota.

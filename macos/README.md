@@ -266,6 +266,33 @@ are skipped on hosts without macOS and Swift.
 The default build is unsigned and intended for development. It is not a
 public release and will not pass the normal Gatekeeper distribution checks.
 
+## In-app updates
+
+The app's bundle identifier is `asia.catgaming.aiprofile` (earlier builds used
+`dev.ducksss.codex-profiles.menu`; their settings are copied over once on first
+launch, and saved Claude API keys keep their Keychain items). About 20 seconds
+after launch and every 12 hours the app reads `latest.json` from
+`https://data.catgaming.asia/AiProfile/release/`; when it names a newer version, the
+footer says so and the gear menu offers **Install AI Profile x.y.z…**.
+**Check for Updates…** checks on demand. Installing always asks first, then
+downloads the zip over https, checks its size and SHA-256 against
+`latest.json`, unpacks it, refuses an app whose bundle identifier or version
+doesn't match, and quits so a small script can swap the bundle (restoring the
+old one if the move fails) and reopen it. No credentials are sent.
+
+To publish an update, bump the version as usual, then run:
+
+```sh
+make menu-update   # or scripts/macos/build-menu-update.sh --notes "What changed"
+```
+
+It builds the app and writes `build/macos/update/AIProfile-<version>.zip` and
+`latest.json`. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
+folder of the public bucket, and purge the CDN cache for `latest.json`. Apps
+only offer a version newer than their own. Development builds are ad-hoc
+signed, so after each update macOS may ask again for Terminal automation and
+Keychain access.
+
 ## Sign and notarise a release
 
 Install your **Developer ID Application** certificate and private key in

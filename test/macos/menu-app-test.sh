@@ -122,6 +122,17 @@ swiftc \
   -parse-as-library \
   -framework AppKit \
   "$APP_SOURCE_DIR"/*.swift \
+  "$APP_PROJECT_DIR/Tests/CodexProfilesMenuTests/AppUpdaterTests.swift" \
+  -o "$TMP_DIR/AppUpdaterTests"
+HOME="$TMP_DIR/home" "$TMP_DIR/AppUpdaterTests"
+
+swiftc \
+  -module-cache-path "$TMP_DIR/module-cache" \
+  -target "$SWIFT_TARGET" \
+  -DTESTING \
+  -parse-as-library \
+  -framework AppKit \
+  "$APP_SOURCE_DIR"/*.swift \
   "$APP_PROJECT_DIR/Previews/RenderPreview.swift" \
   -o "$TMP_DIR/RenderPreview"
 "$TMP_DIR/RenderPreview" "$TMP_DIR/menu-light.png"

@@ -1,7 +1,7 @@
 PREFIX ?= $(HOME)/.local
 BINDIR ?= $(PREFIX)/bin
 
-.PHONY: install uninstall lint test check path-smoke-test install-smoke-test npm-package-test menu-app menu-dmg menu-app-preview menu-app-test outreach
+.PHONY: install uninstall lint test check path-smoke-test install-smoke-test npm-package-test menu-app menu-dmg menu-update menu-app-preview menu-app-test outreach
 
 install:
 	install -d "$(BINDIR)"
@@ -61,6 +61,9 @@ menu-app:
 
 menu-dmg:
 	scripts/macos/build-menu-dmg.sh
+
+menu-update:
+	scripts/macos/build-menu-update.sh
 
 menu-app-preview:
 	scripts/macos/render-menu-preview.sh

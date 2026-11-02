@@ -109,7 +109,7 @@ assert_equals 'release order' $'app-sign\napp-verify\ndmg-create\ndmg-sign\ndmg-
 arguments="$(< "$TMP_DIR/arguments")"
 assert_contains "$arguments" "app-sign|--force|--sign|$SIGNING_IDENTITY|--timestamp|--options|runtime|--entitlements|$FIXTURE_ROOT/macos/CodexProfilesMenu/Release.entitlements|" 'hardened runtime signing'
 assert_contains "$arguments" 'app-verify|--verify|--deep|--strict|' 'app signature verification'
-assert_contains "$arguments" "dmg-sign|--sign|$SIGNING_IDENTITY|--timestamp|--identifier|dev.ducksss.codex-profiles.menu.dmg|" 'DMG signature'
+assert_contains "$arguments" "dmg-sign|--sign|$SIGNING_IDENTITY|--timestamp|--identifier|asia.catgaming.aiprofile.dmg|" 'DMG signature'
 assert_contains "$arguments" 'dmg-verify|--verify|--strict|' 'DMG signature verification'
 assert_contains "$arguments" '|--keychain-profile|test profile|--wait|--output-format|plist' 'notarization profile and wait'
 assert_contains "$arguments" 'assess|--assess|--type|open|--context|context:primary-signature|--verbose|' 'Gatekeeper assessment'

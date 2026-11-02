@@ -5,6 +5,7 @@ import AppKit
 @main
 struct CodexProfilesMenuApp {
     static func main() {
+        LegacyDefaults.migrate(into: .standard, from: UserDefaults.standard.persistentDomain(forName: LegacyDefaults.domain))
         let application = NSApplication.shared
         let delegate = AppDelegate()
         application.delegate = delegate
@@ -33,11 +34,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var eventMonitor: Any?
     private var statusRefreshTask: Task<Void, Never>?
     private let sessionQuotaMonitor = SessionQuotaMonitor()
+    private let updater = AppUpdater()
+    private var updateCheckTask: Task<Void, Never>?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let codexController = WorkspaceMenuViewController(store: store, alerts: alerts)
         codexController.onRequestClose = { [weak self] in self?.popover.performClose(nil) }
         codexController.onRequestShow = { [weak self] in self?.showMenu() }
+        codexController.updater = updater
+        // A quiet check shortly after launch and twice a day; installing always asks first.
+        updateCheckTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(20))
+            while !Task.isCancelled {
+                guard let self else { return }
+                if !self.updater.isBusy && self.updater.availableUpdate == nil { await self.updater.check() }
+                try? await Task.sleep(for: .seconds(12 * 60 * 60))
+            }
+        }
         codexController.onProfileNameVisibilityChange = { [weak self] in
             guard let self else { return }
             self.updateStatusItem(self.alerts.indicator)

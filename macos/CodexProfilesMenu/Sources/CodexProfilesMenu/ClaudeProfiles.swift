@@ -1,6 +1,8 @@
 import Foundation
 import Security
 
+// Kept from before the bundle identifier changed: saved keys and the
+// `apiKeyHelper` commands already written into Claude Code settings use it.
 let claudeAPIKeyService = "dev.ducksss.codex-profiles.claude-api"
 let defaultClaudeProfileID = "default"
 

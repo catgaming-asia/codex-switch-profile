@@ -54,7 +54,7 @@ struct VerticalLayoutTests {
         let toggle = descendants(controller.view).compactMap { $0 as? SectionToggleView }.first!
         let toggleFrame = toggle.convert(toggle.bounds, to: controller.view)
         expect(abs(toggle.bounds.height - 44) < 1 && toggle.bounds.width > 250, "the Codex toggle area must span the header: \(toggle.bounds)")
-        let options = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.toolTip == "Options" }!
+        let options = descendants(controller.view).compactMap { $0 as? NSButton }.first { $0.toolTip == "Codex options" }!
         expect(!toggleFrame.intersects(options.convert(options.bounds, to: controller.view)), "Options must sit beside the toggle area, not inside it")
         expect(options.bounds.width >= 28 && options.bounds.height >= 28, "Options needs a 28-point hit target")
         func click(_ point: NSPoint, in source: NSView) {

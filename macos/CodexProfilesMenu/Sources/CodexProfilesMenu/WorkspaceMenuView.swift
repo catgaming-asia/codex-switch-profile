@@ -186,7 +186,7 @@ final class WorkspaceMenuViewController: NSViewController {
         backButton.action = #selector(backToProfiles)
         backButton.setAccessibilityLabel("Back to profiles")
         backButton.isHidden = true
-        let settings = symbolButton("gearshape", title: "Options", action: #selector(showSettingsMenu(_:)))
+        let settings = symbolButton("gearshape", title: "Codex options", action: #selector(showSettingsMenu(_:)))
         collapseChevron.symbolConfiguration = .init(pointSize: 10, weight: .semibold)
         collapseChevron.contentTintColor = .labelColor
         collapseChevron.widthAnchor.constraint(equalToConstant: 12).isActive = true
@@ -738,6 +738,16 @@ final class WorkspaceMenuViewController: NSViewController {
         login.isEnabled = !store.profiles.isEmpty
         menu.addItem(login)
         menu.addItem(.separator())
+        let guardItem = NSMenuItem(title: "Workspace guard: \(store.guardMode)", action: nil, keyEquivalent: "")
+        guardItem.isEnabled = false
+        menu.addItem(guardItem)
+        return menu
+    }
+
+    /// App-wide settings, shown from the panel's own gear rather than the Codex section's.
+    func appSettingsMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
         let openAtLogin = menuItem("Open at Login", #selector(toggleOpenAtLogin), symbol: nil, nil)
         switch loginItem.status {
         case .enabled: openAtLogin.state = .on
@@ -777,9 +787,6 @@ final class WorkspaceMenuViewController: NSViewController {
                 menu.addItem(check)
             }
         }
-        let guardItem = NSMenuItem(title: "Workspace guard: \(store.guardMode)", action: nil, keyEquivalent: "")
-        guardItem.isEnabled = false
-        menu.addItem(guardItem)
         menu.addItem(.separator())
         let quit = menuItem("Quit AI Profile", #selector(quit), symbol: nil, nil)
         quit.keyEquivalent = "q"

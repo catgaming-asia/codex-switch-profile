@@ -71,7 +71,7 @@ struct MenuInteractionTests {
         expect(!(controller.view is NSVisualEffectView) && !allViews.contains { $0 is NSVisualEffectView },
             "NSPopover must own its background material without a duplicate effect layer")
         let title = allViews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "Codex Profiles" }!
-        let options = allViews.compactMap { $0 as? NSButton }.first { $0.toolTip == "Options" }!
+        let options = allViews.compactMap { $0 as? NSButton }.first { $0.toolTip == "Codex options" }!
         let titleCenter = controller.view.convert(NSPoint(x: title.bounds.midX, y: title.bounds.midY), from: title)
         let optionsCenter = controller.view.convert(NSPoint(x: options.bounds.midX, y: options.bounds.midY), from: options)
         expect(abs(titleCenter.y - optionsCenter.y) < 1, "title and options must share one compact header line")
@@ -355,18 +355,18 @@ struct MenuInteractionTests {
         expect(defaults.string(forKey: "openDestination") == OpenDestination.terminal.rawValue, "a row action must not change the default destination")
 
         // Open at Login reflects and changes the login item.
-        var settings = terminalController.settingsMenu()
+        var settings = terminalController.appSettingsMenu()
         expect(item("Open at Login", in: settings).state == .off, "Open at Login must start off")
         settings.performActionForItem(at: settings.indexOfItem(withTitle: "Open at Login"))
-        expect(login.status == .enabled && item("Open at Login", in: terminalController.settingsMenu()).state == .on,
+        expect(login.status == .enabled && item("Open at Login", in: terminalController.appSettingsMenu()).state == .on,
             "choosing Open at Login must register the app")
-        settings = terminalController.settingsMenu()
+        settings = terminalController.appSettingsMenu()
         settings.performActionForItem(at: settings.indexOfItem(withTitle: "Open at Login"))
         expect(login.status == .disabled && !login.openedSettings, "choosing it again must unregister the app")
         login.statusAfterRegister = .requiresApproval
-        settings = terminalController.settingsMenu()
+        settings = terminalController.appSettingsMenu()
         settings.performActionForItem(at: settings.indexOfItem(withTitle: "Open at Login"))
-        expect(login.openedSettings && item("Open at Login", in: terminalController.settingsMenu()).state == .mixed,
+        expect(login.openedSettings && item("Open at Login", in: terminalController.appSettingsMenu()).state == .mixed,
             "a login item awaiting approval must open Login Items settings and show a mixed state")
 
         // Low-quota alerts start off and ask for permission only when chosen.
@@ -377,32 +377,32 @@ struct MenuInteractionTests {
         let alertsController = WorkspaceMenuViewController(store: store, defaults: defaults, loginItem: login, alerts: alerts)
         _ = alertsController.view
         alerts.start()
-        settings = alertsController.settingsMenu()
+        settings = alertsController.appSettingsMenu()
         settings.update()
         expect(item("Low-quota alerts", in: settings).state == .off && item("Low-quota alerts", in: settings).isEnabled
             && notifier.requests == 0 && notifier.permissionChecks == 0,
             "Low-quota alerts must start off without touching notification permission")
-        expect(!terminalController.settingsMenu().items.contains { $0.title == "Low-quota alerts" },
+        expect(!terminalController.appSettingsMenu().items.contains { $0.title == "Low-quota alerts" },
             "the toggle needs an alerts controller")
         settings.performActionForItem(at: settings.indexOfItem(withTitle: "Low-quota alerts"))
         try await waitUntil { store.statusMessage.hasPrefix("Low-quota alerts") }
-        expect(alerts.isEnabled && notifier.requests == 1 && item("Low-quota alerts", in: alertsController.settingsMenu()).state == .on
+        expect(alerts.isEnabled && notifier.requests == 1 && item("Low-quota alerts", in: alertsController.appSettingsMenu()).state == .on
             && store.statusMessage == "Low-quota alerts on · usage checked every 5 minutes",
             "choosing Low-quota alerts must ask once, turn alerts on and say how often usage is checked")
         expect(defaults.bool(forKey: "lowQuotaAlerts"), "the choice must persist")
         notifier.current = .notDetermined
         await alerts.refreshPermission()
-        expect(item("Low-quota alerts", in: alertsController.settingsMenu()).state == .mixed,
+        expect(item("Low-quota alerts", in: alertsController.appSettingsMenu()).state == .mixed,
             "alerts on without a permission answer must show the same mixed state as a denial")
         notifier.current = .denied
         await alerts.refreshPermission()
-        let revoked = item("Low-quota alerts", in: alertsController.settingsMenu())
+        let revoked = item("Low-quota alerts", in: alertsController.appSettingsMenu())
         expect(revoked.state == .mixed && revoked.toolTip?.contains("System Settings › Notifications") == true,
             "revoked notification permission must show a mixed state that explains where to allow it")
-        settings = alertsController.settingsMenu()
+        settings = alertsController.appSettingsMenu()
         settings.performActionForItem(at: settings.indexOfItem(withTitle: "Low-quota alerts"))
         try await waitUntil { !alerts.isEnabled }
-        expect(!alerts.isEnabled && !store.isRefreshingUsageInBackground && item("Low-quota alerts", in: alertsController.settingsMenu()).state == .off,
+        expect(!alerts.isEnabled && !store.isRefreshingUsageInBackground && item("Low-quota alerts", in: alertsController.appSettingsMenu()).state == .off,
             "choosing it again must turn alerts and background reads off")
 
         // Screenshot mode masks visible profile names while keeping actions bound to real profiles.
@@ -412,7 +412,7 @@ struct MenuInteractionTests {
         _ = privacyController.view
         var visibilityChanges = 0
         privacyController.onProfileNameVisibilityChange = { visibilityChanges += 1 }
-        let hideMenu = privacyController.settingsMenu()
+        let hideMenu = privacyController.appSettingsMenu()
         hideMenu.performActionForItem(at: hideMenu.indexOfItem(withTitle: "Hide profile names"))
         expect(defaults.bool(forKey: "hideProfileNames") && visibilityChanges == 1,
             "Hide profile names must persist and update the status item")
@@ -426,6 +426,11 @@ struct MenuInteractionTests {
         hiddenPicker.selectItem(at: 2)
         _ = hiddenPicker.sendAction(hiddenPicker.action, to: hiddenPicker.target)
         expect(privacyStore.selectedProfile == "work", "masked filter must still select the real profile")
+        // App-wide items live only in the panel's Settings menu; the Codex gear keeps Codex actions.
+        let codexMenu = privacyController.settingsMenu().items.map(\.title)
+        expect(codexMenu.contains("New profile…") && codexMenu.contains { $0.hasPrefix("Workspace guard") }
+            && !codexMenu.contains("Open at Login") && !codexMenu.contains("Quit AI Profile") && !codexMenu.contains("Show profile names"),
+            "the Codex gear must hold only Codex actions: \(codexMenu)")
         let hiddenSignIn = item("Sign in to Codex CLI", in: privacyController.settingsMenu()).submenu!
         expect(hiddenSignIn.items.map(\.title) == ["•••• 1", "•••• 2"]
             && hiddenSignIn.items[1].representedObject as? String == "work",
@@ -437,7 +442,7 @@ struct MenuInteractionTests {
         expect(maskedInfo.contains("Profile ••••") && !maskedInfo.contains("Profile work"),
             "account info must respect Hide profile names")
         descendants(privacyController.view).compactMap { $0 as? NSButton }.first { $0.title == "Back" }!.performClick(nil)
-        let showMenu = privacyController.settingsMenu()
+        let showMenu = privacyController.appSettingsMenu()
         showMenu.performActionForItem(at: showMenu.indexOfItem(withTitle: "Show profile names"))
         expect(!defaults.bool(forKey: "hideProfileNames") && visibilityChanges == 2
             && descendants(privacyController.view).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "work" },

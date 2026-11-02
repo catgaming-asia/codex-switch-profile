@@ -111,7 +111,7 @@ notarisation, see the [macOS build guide](https://github.com/phuhoang304149/code
 ### Open your first profile
 
 1. Click the menu bar icon. Existing profiles appear automatically.
-2. Choose **Add profile…** at the bottom, **New profile…** in the gear menu, or **Create profile…** if the list
+2. Choose **Add profile…** at the bottom, **New profile…** in the Codex Profiles gear, or **Create profile…** if the list
    is empty. Give it a name such as `personal` or `work`. Optionally choose an
    existing `auth.json` to copy into that new profile for Codex CLI usage.
 3. Use **Open in ChatGPT** in the profile's `…` menu and sign in inside
@@ -119,7 +119,7 @@ notarisation, see the [macOS build guide](https://github.com/phuhoang304149/code
 
 Different names can stay open side by side. Reopening a name keeps its local
 data, and `default` opens your normal ChatGPT session. Enable **Open at Login**
-in the gear menu to keep the app available after you log in.
+in Settings (the gear at the top of the panel) to keep the app available after you log in.
 
 Named profiles have a **Switch** button, plus **Rename profile…** and **Remove profile…** in their actions menu.
 Clicking the profile row only selects it. Switching confirms, closes the Desktop app, backs up the
@@ -150,11 +150,11 @@ returns to the profile list.
 
 The menu bar also shows `default`'s `5h` and weekly (`W`) remaining percentages,
 for example `5h 65% · W 63%`; it shows only the icon until that reading is available.
-Choose **Hide profile names** in the gear menu to mask profile names while
+Choose **Hide profile names** in Settings to mask profile names while
 capturing a screenshot, then **Show profile names** to restore them.
 
 The menu bar icon gains a badge when a profile runs low. Turn on
-**Low-quota alerts** in the gear menu for a notification when a profile
+**Low-quota alerts** in Settings for a notification when a profile
 crosses into low or critical. Alerts are off by default, and the app never
 switches profiles unless you separately enable **Auto** and select participants.
 

@@ -9,6 +9,7 @@ and this project follows semantic versioning for tagged releases.
 
 ### Changed
 
+- The macOS menu has a **Settings** gear at the top of the panel for app-wide options: Open at Login, Hide profile names, Low-quota alerts, About, Check for Updates and Quit. The Codex Profiles gear (now labelled Codex options) keeps New profile…, Sign in to Codex CLI and the workspace guard mode.
 - The macOS menu app's bundle identifier is now `asia.catgaming.aiprofile`. Settings saved under the old identifier are copied over on first launch; Open at Login and notification permission must be allowed again.
 - The CI workflow no longer runs automatically on pushes or pull requests; run it manually from the Actions tab (`workflow_dispatch`).
 - The macOS menu app's Codex Profiles and Claude Profiles headers now share one style (44-point row, 13-point semibold Title Case, 16-point icon, one thin separator), and clicking anywhere on a header's title row, including the empty space, folds or unfolds that section. Options and Add stay separate buttons.

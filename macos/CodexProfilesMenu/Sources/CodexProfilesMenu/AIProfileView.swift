@@ -142,6 +142,7 @@ private struct CurrentSection: View {
     @ObservedObject var claude: ClaudeUsageStore
     @ObservedObject var settings: AIProfileSettings
     @ObservedObject var profiles: ClaudeProfileStore
+    let openSettings: () -> Void
     let refresh: () -> Void
 
     var body: some View {
@@ -152,6 +153,10 @@ private struct CurrentSection: View {
                 Button(action: refresh) { Image(systemName: "arrow.clockwise") }
                     .buttonStyle(.borderless).help("Refresh Claude usage")
                     .disabled(claude.isRefreshing)
+                // App-wide settings: login item, privacy, alerts, updates, quit.
+                Button(action: openSettings) { Image(systemName: "gearshape").frame(width: 20, height: 20).contentShape(Rectangle()) }
+                    .buttonStyle(.borderless).help("Settings")
+                    .accessibilityLabel("Settings")
             }
             CodexCurrentBlock(model: codex, settings: settings)
             Divider()
@@ -566,7 +571,8 @@ final class AIProfileViewController: NSViewController {
     override func loadView() {
         let root = NSView()
         view = root
-        let section = NSHostingView(rootView: CurrentSection(codex: current, claude: claude, settings: settings, profiles: profiles) { [weak self] in
+        let section = NSHostingView(rootView: CurrentSection(codex: current, claude: claude, settings: settings, profiles: profiles,
+                                                             openSettings: { [weak self] in self?.showAppSettings() }) { [weak self] in
             guard let self else { return }
             Task { await self.claude.refresh(force: true) }
             Task { await self.rowUsage.refresh(self.profiles, force: true) }
@@ -671,6 +677,11 @@ final class AIProfileViewController: NSViewController {
     }
 
     func focusMenu() { codex.focusMenu() }
+
+    /// Pops the app-wide settings menu under the pointer, where its gear was clicked.
+    func showAppSettings() {
+        codex.appSettingsMenu().popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
 
     /// Reads quota and spend for the Claude profile rows; throttled unless forced.
     func refreshClaudeRows(force: Bool = false) {

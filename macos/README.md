@@ -12,16 +12,18 @@ app creates the normal separate named profile, copies that file into it with
 private permissions, and refreshes Codex quota. Without a selected file, it
 creates the profile as before. The file must be named `auth.json`; existing
 profiles are never overwritten by this action.
-The app opens its menu when you launch it. **New profile…** is also in its gear
-menu. **Add profile…** sits beside **Add workspace…** in the footer. **Add workspace…** optionally binds a project folder to a profile for a
-shortcut. **Open at Login** in the gear menu starts the app quietly in the menu
+The app opens its menu when you launch it. **New profile…** is also in the Codex Profiles gear
+menu, with **Sign In to Codex CLI** and the workspace guard mode. App-wide
+options (**Open at Login**, **Hide profile names**, **Low-quota alerts**,
+updates, About and Quit) are in **Settings**, the gear at the top of the panel. **Add profile…** sits beside **Add workspace…** in the footer. **Add workspace…** optionally binds a project folder to a profile for a
+shortcut. **Open at Login** in Settings starts the app quietly in the menu
 bar when you log in; macOS may ask you to allow it in Login Items. Opening the
 app again from Finder or Spotlight shows the menu.
 
 Open a profile or workspace in **ChatGPT** to use the original installed ChatGPT app. When both ChatGPT.app and Codex.app are installed, the menu uses the one that is running (so **Switch** quits and reopens that bundle); an explicit `CHATGPT_APP`, `CODEX_APP` or `CODEX_APP_BIN` always wins, and with none running the first installed app is used.
 A named profile opens a window with separate local Desktop state and may
 require sign-in inside that window. `default` uses the stock Desktop session.
-**Sign In to Codex CLI** in the settings menu starts the official CLI login in
+**Sign In to Codex CLI** in the Codex Profiles gear menu starts the official CLI login in
 Terminal; it applies only to Codex. Account info reads the local access token
 JWT expiry claim when available, without printing or uploading credentials.
 An access token may refresh automatically; its expiry is not the expiry of the
@@ -149,7 +151,7 @@ usage errors do not interrupt profile launches or open error dialogs.
 
 ## Low-quota alerts
 
-Use **Hide profile names** in the gear menu to mask visible names in profile
+Use **Hide profile names** in Settings to mask visible names in profile
 rows, the profile filter, and menus for screenshots. Choose **Show profile
 names** to restore them. The choice persists across launches and does not
 change profile data or routing.
@@ -166,7 +168,7 @@ quota, but a profile can run lower than it shows until the next reading. The
 icon needs no permission. When names are hidden, its tooltip and VoiceOver
 label omit profile names.
 
-**Low-quota alerts** in the gear menu adds macOS notifications. It is off by
+**Low-quota alerts** in Settings adds macOS notifications. It is off by
 default, and macOS asks for notification permission only when you turn it on.
 If notifications are not allowed, alerts stay off and the app explains how to
 allow them in **System Settings › Notifications**. A permission prompt left
@@ -273,7 +275,7 @@ The app's bundle identifier is `asia.catgaming.aiprofile` (earlier builds used
 launch, and saved Claude API keys keep their Keychain items). About 20 seconds
 after launch and every 12 hours the app reads `latest.json` from
 `https://data.catgaming.asia/AiProfile/release/`; when it names a newer version, the
-footer says so and the gear menu offers **Install AI Profile x.y.z…**.
+footer says so and Settings offers **Install AI Profile x.y.z…**.
 **Check for Updates…** checks on demand. Installing always asks first, then
 downloads the zip over https, checks its size and SHA-256 against
 `latest.json`, unpacks it, refuses an app whose bundle identifier or version
@@ -287,10 +289,12 @@ make menu-update   # or scripts/macos/build-menu-update.sh --notes "What changed
 ```
 
 It builds the app and writes `build/macos/update/AIProfile-<version>.zip` and
-`latest.json`. Or double-click `build/release.command` in Finder (the one
-committed file in `build/`): it runs the same packaging with notes taken from
-the `macos/` commits since the last version tag, writes to `build/release/`
-and opens that folder. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
+`latest.json`. Or double-click `build/release.command` in Finder: it runs the
+same packaging with notes taken from the `macos/` commits since the last
+version tag, writes to `build/release/`, deletes the `build/macos/` working
+folder and opens `build/release/`. `build/build-app.command` only builds
+`build/macos/AI Profile.app` and shows it in Finder. These `*.command` files
+are the only committed files in `build/`. Upload the zip first, then `latest.json`, to the `AiProfile/release/`
 folder of the public bucket, and purge the CDN cache for `latest.json`. Apps
 only offer a version newer than their own. Development builds are ad-hoc
 signed, so after each update macOS may ask again for Terminal automation and

@@ -90,7 +90,13 @@ swiftc \
   "$APP_SOURCE_DIR"/*.swift \
   "$APP_PROJECT_DIR/Tests/CodexProfilesMenuTests/MenuInteractionTests.swift" \
   -o "$TMP_DIR/MenuInteractionTests"
-HOME="$TMP_DIR/home" "$TMP_DIR/MenuInteractionTests" "${TEST_LOCALE[@]}"
+# A test binary that ends early still exits 0, so require its final line.
+interaction_output="$(HOME="$TMP_DIR/home" "$TMP_DIR/MenuInteractionTests" "${TEST_LOCALE[@]}")"
+printf '%s\n' "$interaction_output"
+[[ "$interaction_output" == *"Native menu interaction tests passed."* ]] || {
+  printf 'Error: menu interaction tests ended before their last check.\n' >&2
+  exit 1
+}
 
 swiftc \
   -module-cache-path "$TMP_DIR/module-cache" \

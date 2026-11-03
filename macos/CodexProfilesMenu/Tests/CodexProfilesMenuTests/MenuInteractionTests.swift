@@ -369,6 +369,23 @@ struct MenuInteractionTests {
         expect(login.openedSettings && item("Open at Login", in: terminalController.appSettingsMenu()).state == .mixed,
             "a login item awaiting approval must open Login Items settings and show a mixed state")
 
+        // The first launch asks once whether to open at login; yes registers, the question never returns.
+        for (accept, expected) in [(true, LoginItemStatus.enabled), (false, .disabled)] {
+            let suite = UserDefaults(suiteName: "first-login-\(UUID().uuidString)")!
+            let firstLogin = FakeLoginItem()
+            let firstController = WorkspaceMenuViewController(store: store, defaults: suite, loginItem: firstLogin)
+            var asked = 0
+            firstController.offerOpenAtLoginOnce { asked += 1; return accept }
+            firstController.offerOpenAtLoginOnce { asked += 1; return accept }
+            expect(asked == 1 && firstLogin.status == expected, "the first-launch question must be asked once and honoured (accept: \(accept))")
+        }
+        let enabledSuite = UserDefaults(suiteName: "first-login-\(UUID().uuidString)")!
+        let alreadyOn = FakeLoginItem()
+        alreadyOn.status = .enabled
+        var askedEnabled = false
+        WorkspaceMenuViewController(store: store, defaults: enabledSuite, loginItem: alreadyOn).offerOpenAtLoginOnce { askedEnabled = true; return false }
+        expect(!askedEnabled && alreadyOn.status == .enabled, "an app already opening at login must not be asked")
+
         // Low-quota alerts start off and ask for permission only when chosen.
         // Fresh readings keep the background pass from starting a reader.
         store.loadPreview([], profiles: ["work"], usage: ["work": quota])
@@ -513,16 +530,10 @@ struct MenuInteractionTests {
         var createEvents: [String] = []
         createController.onRequestClose = { createEvents.append("close") }
         createController.onRequestShow = { createEvents.append("show") }
-        let fillDialog = Timer(timeInterval: 0.3, repeats: false) { _ in
-            MainActor.assumeIsolated {
-                let dialog = app.modalWindow!.contentView!
-                descendants(dialog).compactMap { $0 as? NSTextField }.first { $0.isEditable }!.stringValue = "phu"
-                descendants(dialog).compactMap { $0 as? NSButton }.first { $0.title == "Create profile" }!.performClick(nil)
-            }
-        }
-        RunLoop.main.add(fillDialog, forMode: .common)
+        var prompted = 0
+        createController.profilePrompt = { prompted += 1; return ("phu", nil) }
         createController.perform(NSSelectorFromString("createProfile"))
-        expect(createEvents == ["close"], "Add profile must close the menu before its dialog: \(createEvents)")
+        expect(createEvents == ["close"] && prompted == 1, "Add profile must close the menu before its dialog: \(createEvents)")
         for _ in 0..<40 where !createEvents.contains("show") {
             try await Task.sleep(for: .milliseconds(100))
         }

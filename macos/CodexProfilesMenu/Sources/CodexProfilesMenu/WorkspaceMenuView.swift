@@ -69,6 +69,9 @@ final class WorkspaceMenuViewController: NSViewController {
     var onRequestClose: (() -> Void)?
     /// Reopens the menu after a dialog that had to close it, so the result is visible.
     var onRequestShow: (() -> Void)?
+    /// Answers the create-profile dialog without running it; tests use it, since a
+    /// real modal alert ending under a prohibited activation policy can end the process.
+    var profilePrompt: (() -> (String, URL?)?)?
     /// Checks and installs app updates from the release folder; nil hides the menu items.
     var updater: AppUpdater? {
         didSet { updater?.onChange = { [weak self] phase in self?.updateDidChange(phase) } }
@@ -993,6 +996,26 @@ final class WorkspaceMenuViewController: NSViewController {
     }
     @objc private func quit() { NSApp.terminate(nil) }
 
+    /// On the first launch only, asks whether to open at login; the answer is
+    /// never asked again, and an already-registered login item skips the question.
+    func offerOpenAtLoginOnce(confirm: (() -> Bool)? = nil) {
+        let key = "askedOpenAtLogin"
+        guard !defaults.bool(forKey: key) else { return }
+        defaults.set(true, forKey: key)
+        guard loginItem.status == .disabled else { return }
+        if (confirm ?? Self.confirmOpenAtLogin)() { toggleOpenAtLogin() }
+    }
+
+    private static func confirmOpenAtLogin() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "Open AI Profile at login?"
+        alert.informativeText = "AI Profile starts quietly in the menu bar when you log in, so quota and Auto switch keep working. You can change this later in Settings › Open at Login."
+        alert.addButton(withTitle: "Open at Login")
+        alert.addButton(withTitle: "Not Now")
+        NSApp.activate(ignoringOtherApps: true)
+        return alert.runModal() == .alertFirstButtonReturn
+    }
+
     @objc private func toggleOpenAtLogin() {
         do {
             switch loginItem.status {
@@ -1037,6 +1060,25 @@ final class WorkspaceMenuViewController: NSViewController {
         // A transient popover left open behind the modal and its file picker is
         // dismissed half-way and keeps the old list; close it and reopen it after.
         onRequestClose?()
+        guard let (name, authFile) = (profilePrompt ?? runProfilePrompt)() else { return }
+        guard CLIClient.isValidProfileName(name) else {
+            presentError(CLIClientError.invalidProfileName.localizedDescription)
+            return
+        }
+        Task {
+            if await store.createProfile(name, authFile: authFile) {
+                selectedID = nil
+                store.query = ""
+                // Show the full list with the new profile in it, not a filter of one.
+                store.selectedProfile = nil
+                if addingWorkspace { chooseFolder(for: name) } else { onRequestShow?() }
+                await store.refreshUsage()
+            }
+        }
+    }
+
+    /// The create-profile dialog: a trimmed name and an optional auth.json, or nil when cancelled.
+    private func runProfilePrompt() -> (String, URL?)? {
         let alert = NSAlert()
         alert.messageText = "Create a profile"
         alert.informativeText = "Choose a name. Optionally select auth.json to sign in to Codex CLI and load its usage. The ChatGPT window may still ask you to sign in."
@@ -1064,22 +1106,8 @@ final class WorkspaceMenuViewController: NSViewController {
         let authFile = pendingAuthSelection
         pendingAuthSelection = nil
         authSelectionLabel = nil
-        guard response == .alertFirstButtonReturn else { return }
-        let name = field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard CLIClient.isValidProfileName(name) else {
-            presentError(CLIClientError.invalidProfileName.localizedDescription)
-            return
-        }
-        Task {
-            if await store.createProfile(name, authFile: authFile) {
-                selectedID = nil
-                store.query = ""
-                // Show the full list with the new profile in it, not a filter of one.
-                store.selectedProfile = nil
-                if addingWorkspace { chooseFolder(for: name) } else { onRequestShow?() }
-                await store.refreshUsage()
-            }
-        }
+        guard response == .alertFirstButtonReturn else { return nil }
+        return (field.stringValue.trimmingCharacters(in: .whitespacesAndNewlines), authFile)
     }
 
     @objc private func chooseAuthFile(_ sender: NSButton) {

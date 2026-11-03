@@ -142,8 +142,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 event.window == self.menuController?.view.window else { return event }
             return self.menuController?.handleShortcut(event) == true ? nil : event
         }
-        // Login launches stay in the menu bar; launches by the user open the menu.
-        if !Self.launchedAsLoginItem { togglePopover() }
+        // Login launches stay in the menu bar; launches by the user open the menu,
+        // after the one-time Open at Login question on the first launch.
+        if !Self.launchedAsLoginItem {
+            codexController.offerOpenAtLoginOnce()
+            togglePopover()
+        }
     }
 
     /// Opening the app again from Finder or Spotlight shows the menu.
